@@ -1,0 +1,45 @@
+# macOS
+.DS_Store
+
+# Xcode user state
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.moved-aside
+
+# Build products
+build/
+DerivedData/
+*.ipa
+*.dSYM/
+
+# Swift Package Manager
+.build/
+Packages/
+Package.resolved
+
+# Generated media and local experiments
+Generated/
+*.mov
+*.mp4
+*.avi
+*.mkv
+*.hevc
+*.h264
+
+# Python local environments and caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Secrets and local environment files
+.env
+.env.*
+*.pem
+*.p12
+*.mobileprovision
+*.cer
+*.key
+*.token
+secrets.*

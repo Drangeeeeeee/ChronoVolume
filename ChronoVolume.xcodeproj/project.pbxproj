@@ -1,0 +1,552 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXContainerItemProxy section */
+		BBF7C2632F86925C003BDA14 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BBF7C24C2F86925B003BDA14 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BBF7C2532F86925B003BDA14;
+			remoteInfo = ChronoVolume;
+		};
+		BBF7C26D2F86925C003BDA14 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BBF7C24C2F86925B003BDA14 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BBF7C2532F86925B003BDA14;
+			remoteInfo = ChronoVolume;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		BBF7C2542F86925B003BDA14 /* ChronoVolume.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ChronoVolume.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BBF7C2622F86925C003BDA14 /* ChronoVolumeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoVolumeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BBF7C26C2F86925C003BDA14 /* ChronoVolumeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChronoVolumeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		BBF7C2562F86925B003BDA14 /* ChronoVolume */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ChronoVolume;
+			sourceTree = "<group>";
+		};
+		BBF7C2652F86925C003BDA14 /* ChronoVolumeTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ChronoVolumeTests;
+			sourceTree = "<group>";
+		};
+		BBF7C26F2F86925C003BDA14 /* ChronoVolumeUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ChronoVolumeUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		BBF7C2512F86925B003BDA14 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BBF7C25F2F86925C003BDA14 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BBF7C2692F86925C003BDA14 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		BBF7C24B2F86925B003BDA14 = {
+			isa = PBXGroup;
+			children = (
+				BBF7C2562F86925B003BDA14 /* ChronoVolume */,
+				BBF7C2652F86925C003BDA14 /* ChronoVolumeTests */,
+				BBF7C26F2F86925C003BDA14 /* ChronoVolumeUITests */,
+				BBF7C2552F86925B003BDA14 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		BBF7C2552F86925B003BDA14 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BBF7C2542F86925B003BDA14 /* ChronoVolume.app */,
+				BBF7C2622F86925C003BDA14 /* ChronoVolumeTests.xctest */,
+				BBF7C26C2F86925C003BDA14 /* ChronoVolumeUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		BBF7C2532F86925B003BDA14 /* ChronoVolume */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BBF7C2762F86925C003BDA14 /* Build configuration list for PBXNativeTarget "ChronoVolume" */;
+			buildPhases = (
+				BBF7C2502F86925B003BDA14 /* Sources */,
+				BBF7C2512F86925B003BDA14 /* Frameworks */,
+				BBF7C2522F86925B003BDA14 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				BBF7C2562F86925B003BDA14 /* ChronoVolume */,
+			);
+			name = ChronoVolume;
+			packageProductDependencies = (
+			);
+			productName = ChronoVolume;
+			productReference = BBF7C2542F86925B003BDA14 /* ChronoVolume.app */;
+			productType = "com.apple.product-type.application";
+		};
+		BBF7C2612F86925C003BDA14 /* ChronoVolumeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BBF7C2792F86925C003BDA14 /* Build configuration list for PBXNativeTarget "ChronoVolumeTests" */;
+			buildPhases = (
+				BBF7C25E2F86925C003BDA14 /* Sources */,
+				BBF7C25F2F86925C003BDA14 /* Frameworks */,
+				BBF7C2602F86925C003BDA14 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BBF7C2642F86925C003BDA14 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				BBF7C2652F86925C003BDA14 /* ChronoVolumeTests */,
+			);
+			name = ChronoVolumeTests;
+			packageProductDependencies = (
+			);
+			productName = ChronoVolumeTests;
+			productReference = BBF7C2622F86925C003BDA14 /* ChronoVolumeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		BBF7C26B2F86925C003BDA14 /* ChronoVolumeUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BBF7C27C2F86925C003BDA14 /* Build configuration list for PBXNativeTarget "ChronoVolumeUITests" */;
+			buildPhases = (
+				BBF7C2682F86925C003BDA14 /* Sources */,
+				BBF7C2692F86925C003BDA14 /* Frameworks */,
+				BBF7C26A2F86925C003BDA14 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BBF7C26E2F86925C003BDA14 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				BBF7C26F2F86925C003BDA14 /* ChronoVolumeUITests */,
+			);
+			name = ChronoVolumeUITests;
+			packageProductDependencies = (
+			);
+			productName = ChronoVolumeUITests;
+			productReference = BBF7C26C2F86925C003BDA14 /* ChronoVolumeUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		BBF7C24C2F86925B003BDA14 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					BBF7C2532F86925B003BDA14 = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					BBF7C2612F86925C003BDA14 = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = BBF7C2532F86925B003BDA14;
+					};
+					BBF7C26B2F86925C003BDA14 = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = BBF7C2532F86925B003BDA14;
+					};
+				};
+			};
+			buildConfigurationList = BBF7C24F2F86925B003BDA14 /* Build configuration list for PBXProject "ChronoVolume" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = BBF7C24B2F86925B003BDA14;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = BBF7C2552F86925B003BDA14 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				BBF7C2532F86925B003BDA14 /* ChronoVolume */,
+				BBF7C2612F86925C003BDA14 /* ChronoVolumeTests */,
+				BBF7C26B2F86925C003BDA14 /* ChronoVolumeUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		BBF7C2522F86925B003BDA14 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BBF7C2602F86925C003BDA14 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BBF7C26A2F86925C003BDA14 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		BBF7C2502F86925B003BDA14 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BBF7C25E2F86925C003BDA14 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BBF7C2682F86925C003BDA14 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		BBF7C2642F86925C003BDA14 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BBF7C2532F86925B003BDA14 /* ChronoVolume */;
+			targetProxy = BBF7C2632F86925C003BDA14 /* PBXContainerItemProxy */;
+		};
+		BBF7C26E2F86925C003BDA14 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BBF7C2532F86925B003BDA14 /* ChronoVolume */;
+			targetProxy = BBF7C26D2F86925C003BDA14 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		BBF7C2742F86925C003BDA14 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		BBF7C2752F86925C003BDA14 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		BBF7C2772F86925C003BDA14 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ChronoVolume/ChronoVolume.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = ChronoVolume;
+				INFOPLIST_KEY_CFBundleName = ChronoVolume;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.chronovolume.ChronoVolume;
+				PRODUCT_NAME = ChronoVolume;
+				REGISTER_APP_GROUPS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		BBF7C2782F86925C003BDA14 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ChronoVolume/ChronoVolume.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = ChronoVolume;
+				INFOPLIST_KEY_CFBundleName = ChronoVolume;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.chronovolume.ChronoVolume;
+				PRODUCT_NAME = ChronoVolume;
+				REGISTER_APP_GROUPS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		BBF7C27A2F86925C003BDA14 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.chronovolume.ChronoVolumeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ChronoVolume.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ChronoVolume";
+			};
+			name = Debug;
+		};
+		BBF7C27B2F86925C003BDA14 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.chronovolume.ChronoVolumeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ChronoVolume.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ChronoVolume";
+			};
+			name = Release;
+		};
+		BBF7C27D2F86925C003BDA14 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.chronovolume.ChronoVolumeUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = ChronoVolume;
+			};
+			name = Debug;
+		};
+		BBF7C27E2F86925C003BDA14 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.chronovolume.ChronoVolumeUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = ChronoVolume;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		BBF7C24F2F86925B003BDA14 /* Build configuration list for PBXProject "ChronoVolume" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BBF7C2742F86925C003BDA14 /* Debug */,
+				BBF7C2752F86925C003BDA14 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BBF7C2762F86925C003BDA14 /* Build configuration list for PBXNativeTarget "ChronoVolume" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BBF7C2772F86925C003BDA14 /* Debug */,
+				BBF7C2782F86925C003BDA14 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BBF7C2792F86925C003BDA14 /* Build configuration list for PBXNativeTarget "ChronoVolumeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BBF7C27A2F86925C003BDA14 /* Debug */,
+				BBF7C27B2F86925C003BDA14 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BBF7C27C2F86925C003BDA14 /* Build configuration list for PBXNativeTarget "ChronoVolumeUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BBF7C27D2F86925C003BDA14 /* Debug */,
+				BBF7C27E2F86925C003BDA14 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = BBF7C24C2F86925B003BDA14 /* Project object */;
+}
