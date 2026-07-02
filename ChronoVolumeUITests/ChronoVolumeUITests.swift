@@ -1,10 +1,6 @@
 //
 //  ChronoVolumeUITests.swift
 //  ChronoVolumeUITests
-//
-//  Created by Muring Sen on 2026/4/8.
-//
-
 import XCTest
 
 final class ChronoVolumeUITests: XCTestCase {
