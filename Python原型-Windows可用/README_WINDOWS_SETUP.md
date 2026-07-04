@@ -8,6 +8,7 @@
 - `ChronoVolumePrototypeSetupAssistant.ps1`：真正的 Windows 中文图形界面程序。
 - `ChronoVolume-原型程序.py`：已经改名后的 Python 原型程序，窗口标题也是 `ChronoVolume-原型程序`。
 - `requirements-chronovolume-prototype.txt`：记录原型程序需要的 Python 包。
+- `使用方法与注意事项.md`：更完整的使用流程、注意事项和常见问题。
 
 ## 给 Windows 用户的用法
 
