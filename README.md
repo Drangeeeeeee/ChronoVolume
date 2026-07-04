@@ -11,11 +11,33 @@ ChronoVolume is a macOS SwiftUI and Metal application for exploring video as a t
 - High-precision slice export paths
 - Experimental distributed rendering worker/client components
 
+## Windows Python Prototype
+
+This repository also includes a Windows-friendly Python prototype in `Python原型-Windows可用/`.
+
+That folder contains:
+
+- `ChronoVolume-原型程序.py`: the Python prototype application
+- `Start-ChronoVolume-Prototype-Setup.cmd`: double-click launcher for Windows users
+- `ChronoVolumePrototypeSetupAssistant.ps1`: Chinese GUI setup assistant
+- `requirements-chronovolume-prototype.txt`: Python package requirements
+- `README_WINDOWS_SETUP.md`: Windows setup instructions in Chinese
+
+The prototype can install/check Python, FFmpeg, and the required Python packages on Windows, then launch the prototype app.
+
 ## Requirements
+
+For the main macOS app:
 
 - macOS 14 or newer
 - Xcode with Swift 5 support
 - Apple Silicon or Intel Mac with Metal support
+
+For the Windows Python prototype:
+
+- Windows 10/11
+- PowerShell
+- Internet access for first-time dependency installation
 
 ## Build
 
@@ -29,4 +51,4 @@ This export intentionally excludes local generated media, virtual environments, 
 
 ## License
 
-Choose and add a license before publishing publicly. Common choices include MIT, Apache-2.0, GPL-3.0, or a custom license, depending on how you want others to use the project.
+This project is released under the MIT License. See `LICENSE` for details.
