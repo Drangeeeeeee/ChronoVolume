@@ -3,6 +3,8 @@ import Foundation
 struct DistributedRangeExportRequest {
     let jobID: UUID
     let localSourcePath: String
+    var localAlphaSourcePath: String? = nil
+    var externalAlphaSettings: ExternalAlphaSettings? = nil
 
     let mode: SliceMode
     let axis: DistributedAxis
@@ -23,6 +25,7 @@ struct DistributedRangeExportRequest {
 
     let codec: String
     let colorProfile: VideoColorProfile
+    var bitDepth: Int = 8
     let outputDirectory: URL
     let preparedRawCacheURL: URL?
     let preparedRawCacheData: Data?

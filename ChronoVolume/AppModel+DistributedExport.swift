@@ -558,7 +558,82 @@ extension AppModel {
             status = "请先启用分布式导出"
             return
         }
+        if let pair = videoSourcePair, pair.alphaSourceMode == .external {
+            if let rejection = ExternalPairedRenderPolicy.rejectionReason(
+                sourceColorBitDepth: sourceBitDepth,
+                sourceAlphaBitDepth: sourceAlphaBitDepth,
+                outputBitDepth: bitDepth,
+                usesGeneratedWhiteColor: pair.usesGeneratedWhiteColor
+            ) {
+                status = rejection
+                return
+            }
+            status = "正在检查源分辨率 paired volume 内存预算…"
+            Task.detached(priority: .userInitiated) { [pair] in
+                let colorAccess = pair.colorURL.startAccessingSecurityScopedResource()
+                let alphaAccess = pair.alphaURL?.startAccessingSecurityScopedResource() ?? false
+                defer {
+                    if colorAccess { pair.colorURL.stopAccessingSecurityScopedResource() }
+                    if alphaAccess { pair.alphaURL?.stopAccessingSecurityScopedResource() }
+                }
+                do {
+                    let estimate = try await HighPrecisionCacheHelper.validatePairedVolumeMemoryBudget(
+                        colorURL: pair.colorURL,
+                        fallbackDepth: nil,
+                        generatedWhiteColor: pair.usesGeneratedWhiteColor
+                    )
+                    await MainActor.run {
+                        self.status = "正在建立源分辨率 paired volume：\(estimate.diagnostic)"
+                    }
+                    let prepared = try await HighPrecisionCacheHelper.prepareSourceResolutionPairedVolume(
+                        for: pair,
+                        validatedEstimate: estimate
+                    )
+                    await MainActor.run {
+                        self.status = "源分辨率 paired volume 已就绪：\(prepared.diagnostic)"
+                        self.startDistributedExportPrepared(
+                            settings: settings,
+                            preserveAlpha: preserveAlpha,
+                            padToEven: padToEven,
+                            qualityScale: qualityScale,
+                            bitDepth: bitDepth,
+                            colorProfile: colorProfile,
+                            preparedExternalVolume: prepared.volume
+                        )
+                    }
+                } catch {
+                    await MainActor.run {
+                        self.status = "无法开始分布式导出：\(error.localizedDescription)"
+                    }
+                }
+            }
+            return
+        }
 
+        startDistributedExportPrepared(
+            settings: settings,
+            preserveAlpha: preserveAlpha,
+            padToEven: padToEven,
+            qualityScale: qualityScale,
+            bitDepth: bitDepth,
+            colorProfile: colorProfile,
+            preparedExternalVolume: nil
+        )
+    }
+
+    private func startDistributedExportPrepared(
+        settings: DistributedExportSettings,
+        preserveAlpha: Bool,
+        padToEven: Bool,
+        qualityScale: Double,
+        bitDepth: Int,
+        colorProfile: VideoColorProfile,
+        preparedExternalVolume: CPUVolume?
+    ) {
+        guard settings.isEnabled else {
+            status = "请先启用分布式导出"
+            return
+        }
         settings.clearWorkerCacheHint()
 
         let exportMode = sliceMode
@@ -579,9 +654,11 @@ extension AppModel {
         let exportColorProfile = colorProfile
 
         // 拍平主线程状态，避免后台任务访问 MainActor 隔离属性
-        let sourceWidthSnapshot = distributedSourceWidth
-        let sourceHeightSnapshot = distributedSourceHeight
-        let sourceFrameCountSnapshot = sourceFrameCount
+        let sourceWidthSnapshot = preparedExternalVolume?.width ?? distributedSourceWidth
+        let sourceHeightSnapshot = preparedExternalVolume?.height ?? distributedSourceHeight
+        let sourceFrameCountSnapshot = preparedExternalVolume?.depth ?? sourceFrameCount
+        let sourceColorBitDepthSnapshot = sourceBitDepth
+        let sourceAlphaBitDepthSnapshot = sourceAlphaBitDepth
         let offerUploadWhenSourceMissing = settings.offerUploadWhenSourceMissing
         let recordDiagnostics = settings.recordExportDiagnostics
         let qualityScaleSnapshot = min(1.0, max(0.05, qualityScale))
@@ -597,13 +674,16 @@ extension AppModel {
             )
             : nil
 
-        let totalFrames = highPrecisionPlaneMetrics?.sliceCount ?? distributedOutputFrameCount
+        let totalFrames = highPrecisionPlaneMetrics?.sliceCount
+            ?? preparedExternalVolume?.timeCount(for: axis)
+            ?? distributedOutputFrameCount
         guard totalFrames > 0 else {
             status = "当前切面没有可分布式导出的输出帧"
             return
         }
 
         let outputSizeSnapshot = highPrecisionPlaneMetrics.map { (width: $0.width, height: $0.height) }
+            ?? preparedExternalVolume.map { $0.imageSize(for: axis) }
             ?? distributedOutputImageSize
         guard outputSizeSnapshot.width > 0, outputSizeSnapshot.height > 0 else {
             status = "当前切面输出尺寸无效，无法分布式导出"
@@ -680,7 +760,7 @@ extension AppModel {
         )
 
         if schedulingChoice.mode != .dynamicChunk && fixedPlan.workers.filter({ $0.frameCount > 0 }).isEmpty {
-            Task.detached(priority: .userInitiated) { [sourceURL, finalOutputURL, legacyPlan, fixedPlan, exportMode, axis, axisText, referencePlaneSnapshot, fps, sourceWidthSnapshot, sourceHeightSnapshot, sourceFrameCountSnapshot, preserveAlpha, padToEven, qualityScaleSnapshot, recordDiagnostics, sessionID] in
+            Task.detached(priority: .userInitiated) { [sourceURL, finalOutputURL, legacyPlan, fixedPlan, exportMode, axis, axisText, referencePlaneSnapshot, fps, sourceWidthSnapshot, sourceHeightSnapshot, sourceFrameCountSnapshot, preserveAlpha, padToEven, qualityScaleSnapshot, recordDiagnostics, sessionID, preparedExternalVolume] in
                 final class LocalTimingDetailBox: @unchecked Sendable {
                     var value: String = "-"
                 }
@@ -742,6 +822,7 @@ extension AppModel {
                         qualityScale: qualityScaleSnapshot,
                         outputStartFrame: legacyPlan.localStartFrame,
                         outputEndFrame: legacyPlan.localEndFrame,
+                        preparedCPUVolume: preparedExternalVolume,
                         bitDepth: exportBitDepth,
                         colorProfile: exportColorProfile,
                         progress: progressHandler
@@ -801,7 +882,11 @@ extension AppModel {
             return
         }
 
-        Task.detached(priority: .userInitiated) { [sourceURL, finalOutputURL, fixedPlan, legacyPlan, schedulingChoice, exportMode, axis, referencePlaneSnapshot, outputSizeSnapshot, fps, sourceWidthSnapshot, sourceHeightSnapshot, sourceFrameCountSnapshot, preserveAlpha, padToEven, qualityScaleSnapshot, offerUploadWhenSourceMissing, recordDiagnostics, workerSnapshots] in
+        let sourcePairSnapshot = videoSourcePair
+        let mergedCPUVolumeSnapshot = sourcePairSnapshot?.alphaSourceMode == .external
+            ? preparedExternalVolume
+            : nil
+        Task.detached(priority: .userInitiated) { [sourceURL, sourcePairSnapshot, mergedCPUVolumeSnapshot, finalOutputURL, fixedPlan, legacyPlan, schedulingChoice, exportMode, axis, referencePlaneSnapshot, outputSizeSnapshot, fps, sourceWidthSnapshot, sourceHeightSnapshot, sourceFrameCountSnapshot, sourceColorBitDepthSnapshot, sourceAlphaBitDepthSnapshot, exportBitDepth, preserveAlpha, padToEven, qualityScaleSnapshot, offerUploadWhenSourceMissing, recordDiagnostics, workerSnapshots] in
             let didAccess = sourceURL.startAccessingSecurityScopedResource()
             defer {
                 if didAccess {
@@ -914,6 +999,49 @@ extension AppModel {
                         return
                     }
 
+                    var workerLocalAlphaPath: String?
+                    var alphaHash: String?
+                    let externalAlphaURL = sourcePairSnapshot?.alphaSourceMode == .external
+                        ? sourcePairSnapshot?.alphaURL
+                        : nil
+                    if let externalAlphaURL {
+                        var alphaChecked = try await DistributedExportCoordinator.checkWorkerSource(
+                            workerURL: workerURL,
+                            sourceURL: externalAlphaURL
+                        )
+                        if !alphaChecked.response.exists && offerUploadWhenSourceMissing {
+                            try await DistributedExportCoordinator.uploadSourceToWorker(
+                                workerURL: workerURL,
+                                sourceURL: externalAlphaURL,
+                                sourceHash: alphaChecked.hash,
+                                progress: { progress, message in
+                                    await MainActor.run {
+                                        settings.updateProgressItem(
+                                            nodeID: allocation.id,
+                                            displayName: worker.displayName,
+                                            role: "worker",
+                                            state: "uploading",
+                                            progress: progress,
+                                            message: "B_alpha：\(message)"
+                                        )
+                                    }
+                                }
+                            )
+                            alphaChecked = try await DistributedExportCoordinator.checkWorkerSource(
+                                workerURL: workerURL,
+                                sourceURL: externalAlphaURL
+                            )
+                        }
+                        guard alphaChecked.response.exists, let alphaPath = alphaChecked.response.localPath else {
+                            await MainActor.run {
+                                self.status = "\(worker.displayName) 缺少 B_alpha：\(externalAlphaURL.lastPathComponent)，已阻止退化为内嵌 Alpha。"
+                            }
+                            return
+                        }
+                        workerLocalAlphaPath = alphaPath
+                        alphaHash = alphaChecked.hash
+                    }
+
                     workerTargets.append(
                         DistributedWorkerExportTarget(
                             nodeID: allocation.id,
@@ -921,6 +1049,15 @@ extension AppModel {
                             workerURL: workerURL,
                             workerLocalPath: workerLocalPath,
                             sourceFileHash: checked.hash,
+                            workerLocalAlphaPath: workerLocalAlphaPath,
+                            alphaSourceFileHash: alphaHash,
+                            alphaSourceURL: externalAlphaURL,
+                            alphaSourceMode: externalAlphaURL == nil ? (sourcePairSnapshot?.alphaSourceMode ?? .opaque) : .external,
+                            externalAlphaSettings: sourcePairSnapshot?.externalAlphaSettings ?? ExternalAlphaSettings(),
+                            usesGeneratedWhiteColor: sourcePairSnapshot?.usesGeneratedWhiteColor ?? false,
+                            sourceColorBitDepth: sourceColorBitDepthSnapshot,
+                            sourceAlphaBitDepth: sourceAlphaBitDepthSnapshot,
+                            outputBitDepth: exportBitDepth,
                             allocation: allocation
                         )
                     )
@@ -982,6 +1119,8 @@ extension AppModel {
                         padToEven: padToEven,
                         qualityScale: qualityScaleSnapshot,
                         colorProfile: exportColorProfile,
+                        outputBitDepth: exportBitDepth,
+                        preparedCPUVolume: mergedCPUVolumeSnapshot,
                         sessionID: sessionID,
                         recordDiagnostics: recordDiagnostics
                     )
@@ -1007,6 +1146,8 @@ extension AppModel {
                         padToEven: padToEven,
                         qualityScale: qualityScaleSnapshot,
                         colorProfile: exportColorProfile,
+                        outputBitDepth: exportBitDepth,
+                        preparedCPUVolume: mergedCPUVolumeSnapshot,
                         sessionID: sessionID,
                         recordDiagnostics: recordDiagnostics
                     )
@@ -1505,6 +1646,15 @@ extension AppModel {
         let workerURL: URL
         let workerLocalPath: String
         let sourceFileHash: String
+        let workerLocalAlphaPath: String?
+        let alphaSourceFileHash: String?
+        let alphaSourceURL: URL?
+        let alphaSourceMode: AlphaSourceMode
+        let externalAlphaSettings: ExternalAlphaSettings
+        let usesGeneratedWhiteColor: Bool
+        let sourceColorBitDepth: Int
+        let sourceAlphaBitDepth: Int
+        let outputBitDepth: Int
         let allocation: DistributedSegmentAllocation
     }
 
@@ -1685,6 +1835,8 @@ extension AppModel {
         padToEven: Bool,
         qualityScale: Double,
         colorProfile: VideoColorProfile,
+        outputBitDepth: Int,
+        preparedCPUVolume: CPUVolume?,
         sessionID: String,
         recordDiagnostics: Bool
     ) async throws {
@@ -1823,28 +1975,27 @@ extension AppModel {
                     "host_\(sourceFileHash)_\(sourceWidth)x\(sourceHeight)x\(sourceFrameCount).rawframes"
                 )
                 let hostRawStart = Date()
-                let hostRawCacheURL = try VideoExportHelper.prepareDistributedRawFrameCache(
-                    sourceURL: sourceURL,
-                    outputURL: hostPreparedRawCacheURL,
-                    sourceWidth: sourceWidth,
-                    sourceHeight: sourceHeight,
-                    sourceFrameCount: sourceFrameCount,
-                    progress: { p, text in
-                        Task {
-                            await MainActor.run {
-                                settings.updateProgressItem(
-                                    nodeID: "host",
-                                    displayName: "本机",
-                                    role: "host",
-                                    state: "preparing",
-                                    progress: min(0.08, p * 0.08),
-                                    message: text ?? "正在建立本机 raw cache"
-                                )
-                                model.updateDistributedStatusBar(settings: settings, title: "本机正在预热导出缓存")
+                let hostRawCacheURL: URL? = preparedCPUVolume == nil
+                    ? try VideoExportHelper.prepareDistributedRawFrameCache(
+                        sourceURL: sourceURL,
+                        outputURL: hostPreparedRawCacheURL,
+                        sourceWidth: sourceWidth,
+                        sourceHeight: sourceHeight,
+                        sourceFrameCount: sourceFrameCount,
+                        progress: { p, text in
+                            Task {
+                                await MainActor.run {
+                                    settings.updateProgressItem(
+                                        nodeID: "host", displayName: "本机", role: "host",
+                                        state: "preparing", progress: min(0.08, p * 0.08),
+                                        message: text ?? "正在建立本机 raw cache"
+                                    )
+                                    model.updateDistributedStatusBar(settings: settings, title: "本机正在预热导出缓存")
+                                }
                             }
                         }
-                    }
-                )
+                    )
+                    : nil
                 let hostRawDuration = secondsSince(hostRawStart)
 
                 if !workerWarmupTasks.isEmpty {
@@ -1917,6 +2068,8 @@ extension AppModel {
                     outputStartFrame: plan.local.startFrame,
                     outputEndFrame: plan.local.endFrame,
                     preparedRawCacheURL: hostRawCacheURL,
+                    preparedCPUVolume: preparedCPUVolume,
+                    bitDepth: outputBitDepth,
                     colorProfile: colorProfile,
                     progress: progressHandler
                 )
@@ -1961,7 +2114,17 @@ extension AppModel {
                     rangeStart: target.allocation.startFrame,
                     rangeEnd: target.allocation.endFrame,
                     colorProfile: colorProfile,
-                    sourceFileHash: target.sourceFileHash
+                    sourceFileHash: target.sourceFileHash,
+                    alphaSourceURL: target.alphaSourceURL,
+                    alphaSourceFileHash: target.alphaSourceFileHash,
+                    alphaSourceMode: target.alphaSourceMode,
+                    externalAlphaSettings: target.externalAlphaSettings,
+                    usesGeneratedWhiteColor: target.usesGeneratedWhiteColor,
+                    sourceColorBitDepth: target.sourceColorBitDepth,
+                    sourceAlphaBitDepth: target.sourceAlphaBitDepth,
+                    outputBitDepth: target.outputBitDepth,
+                    sourcePresentationTimes: preparedCPUVolume?.presentationTimes,
+                    alphaAssociation: preparedCPUVolume?.alphaAssociation
                 )
 
                 let workerRemoteRenderStart = Date()
@@ -1969,7 +2132,8 @@ extension AppModel {
                     workerURL: target.workerURL,
                     job: workerJob,
                     workerLocalSourcePath: target.workerLocalPath,
-                    preparedRawCachePath: preparedRawCachePath
+                    preparedRawCachePath: preparedRawCachePath,
+                    workerLocalAlphaSourcePath: target.workerLocalAlphaPath
                 )
 
                 let remoteResult = try await DistributedExportCoordinator.pollRemoteWorkerJob(
@@ -2151,6 +2315,8 @@ extension AppModel {
         padToEven: Bool,
         qualityScale: Double,
         colorProfile: VideoColorProfile,
+        outputBitDepth: Int,
+        preparedCPUVolume: CPUVolume?,
         sessionID: String,
         recordDiagnostics: Bool
     ) async throws {
@@ -2285,28 +2451,27 @@ extension AppModel {
                 "host_\(sourceFileHash)_\(sourceWidth)x\(sourceHeight)x\(sourceFrameCount).rawframes"
             )
             let hostRawStart = Date()
-            let hostRawCacheURL = try VideoExportHelper.prepareDistributedRawFrameCache(
-                sourceURL: sourceURL,
-                outputURL: hostPreparedRawCacheURL,
-                sourceWidth: sourceWidth,
-                sourceHeight: sourceHeight,
-                sourceFrameCount: sourceFrameCount,
-                progress: { p, text in
-                    Task {
-                        await MainActor.run {
-                            settings.updateProgressItem(
-                                nodeID: "host",
-                                displayName: "本机",
-                                role: "host",
-                                state: "preparing",
-                                progress: min(0.08, p * 0.08),
-                                message: text ?? "正在建立本机 raw cache"
-                            )
-                            model.updateDistributedStatusBar(settings: settings, title: "本机正在预热导出缓存")
+            let hostRawCacheURL: URL? = preparedCPUVolume == nil
+                ? try VideoExportHelper.prepareDistributedRawFrameCache(
+                    sourceURL: sourceURL,
+                    outputURL: hostPreparedRawCacheURL,
+                    sourceWidth: sourceWidth,
+                    sourceHeight: sourceHeight,
+                    sourceFrameCount: sourceFrameCount,
+                    progress: { p, text in
+                        Task {
+                            await MainActor.run {
+                                settings.updateProgressItem(
+                                    nodeID: "host", displayName: "本机", role: "host",
+                                    state: "preparing", progress: min(0.08, p * 0.08),
+                                    message: text ?? "正在建立本机 raw cache"
+                                )
+                                model.updateDistributedStatusBar(settings: settings, title: "本机正在预热导出缓存")
+                            }
                         }
                     }
-                }
-            )
+                )
+                : nil
             let hostRawDuration = secondsSince(hostRawStart)
 
             for task in workerWarmupTasks.values {
@@ -2369,6 +2534,8 @@ extension AppModel {
                     outputStartFrame: chunk.startFrame,
                     outputEndFrame: chunk.endFrame,
                     preparedRawCacheURL: hostRawCacheURL,
+                    preparedCPUVolume: preparedCPUVolume,
+                    bitDepth: outputBitDepth,
                     colorProfile: colorProfile,
                     progress: progressHandler
                 )
@@ -2419,7 +2586,17 @@ extension AppModel {
                             rangeStart: chunk.startFrame,
                             rangeEnd: chunk.endFrame,
                             colorProfile: colorProfile,
-                            sourceFileHash: target.sourceFileHash
+                            sourceFileHash: target.sourceFileHash,
+                            alphaSourceURL: target.alphaSourceURL,
+                            alphaSourceFileHash: target.alphaSourceFileHash,
+                            alphaSourceMode: target.alphaSourceMode,
+                            externalAlphaSettings: target.externalAlphaSettings,
+                            usesGeneratedWhiteColor: target.usesGeneratedWhiteColor,
+                            sourceColorBitDepth: target.sourceColorBitDepth,
+                            sourceAlphaBitDepth: target.sourceAlphaBitDepth,
+                            outputBitDepth: target.outputBitDepth,
+                            sourcePresentationTimes: preparedCPUVolume?.presentationTimes,
+                            alphaAssociation: preparedCPUVolume?.alphaAssociation
                         )
                     }
                     let batchID = UUID()
@@ -2431,7 +2608,8 @@ extension AppModel {
                         batchID: batchID,
                         jobs: workerJobs,
                         workerLocalSourcePath: target.workerLocalPath,
-                        preparedRawCachePath: preparedRawCachePath
+                        preparedRawCachePath: preparedRawCachePath,
+                        workerLocalAlphaSourcePath: target.workerLocalAlphaPath
                     )
 
                     let remoteBatchResult = try await DistributedExportCoordinator.pollRemoteWorkerJobBatch(
@@ -2608,6 +2786,7 @@ extension AppModel {
         preserveAlpha: Bool,
         padToEven: Bool,
         qualityScale: Double,
+        outputBitDepth: Int,
         sourceFileHash: String,
         workerLocalPath: String,
         sessionID: String,
@@ -2821,6 +3000,7 @@ extension AppModel {
                     outputStartFrame: plan.localStartFrame,
                     outputEndFrame: plan.localEndFrame,
                     preparedRawCacheURL: hostRawCacheURL,
+                    bitDepth: outputBitDepth,
                     progress: { p, text in
                         if let text {
                             hostDetailBox.value = text
@@ -2896,7 +3076,8 @@ extension AppModel {
                     qualityScale: qualityScale,
                     rangeStart: plan.workerStartFrame,
                     rangeEnd: plan.workerEndFrame,
-                    sourceFileHash: sourceFileHash
+                    sourceFileHash: sourceFileHash,
+                    outputBitDepth: outputBitDepth
                 )
 
                 let workerRemoteRenderStart = Date()
@@ -3099,6 +3280,7 @@ extension AppModel {
         preserveAlpha: Bool,
         padToEven: Bool,
         qualityScale: Double,
+        outputBitDepth: Int,
         sourceFileHash: String,
         workerLocalPath: String,
         sessionID: String
@@ -3294,6 +3476,7 @@ extension AppModel {
                         outputStartFrame: chunk.startFrame,
                         outputEndFrame: chunk.endFrame,
                         preparedRawCacheURL: hostRawCacheURL,
+                        bitDepth: outputBitDepth,
                         progress: { p, text in
                             Task {
                                 let progressSnapshot = await chunkQueue.updateInFlightProgress(
@@ -3409,7 +3592,8 @@ extension AppModel {
                             qualityScale: qualityScale,
                             rangeStart: chunk.startFrame,
                             rangeEnd: chunk.endFrame,
-                            sourceFileHash: sourceFileHash
+                            sourceFileHash: sourceFileHash,
+                            outputBitDepth: outputBitDepth
                         )
                     }
                     let batchID = UUID()

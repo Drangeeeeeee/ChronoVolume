@@ -34,6 +34,7 @@ struct VideoExportRequest {
     let meshSupersampleScale: Int
     let volumeTextureCacheID: UUID?
     let usesModifiedVolumeTexture: Bool
+    let preferCPUExport: Bool
 
     init(
         url: URL,
@@ -60,7 +61,8 @@ struct VideoExportRequest {
         mesh: LoadedMesh? = nil,
         meshSupersampleScale: Int = 1,
         volumeTextureCacheID: UUID? = nil,
-        usesModifiedVolumeTexture: Bool = false
+        usesModifiedVolumeTexture: Bool = false,
+        preferCPUExport: Bool = false
     ) {
         self.url = url
         self.width = width
@@ -87,6 +89,7 @@ struct VideoExportRequest {
         self.meshSupersampleScale = max(1, min(3, meshSupersampleScale))
         self.volumeTextureCacheID = volumeTextureCacheID
         self.usesModifiedVolumeTexture = usesModifiedVolumeTexture
+        self.preferCPUExport = preferCPUExport
     }
 }
 
@@ -1331,6 +1334,11 @@ private final class GPUExportContext {
 }
 
 enum VideoExportHelper {
+    /// AVAssetWriter + Metal-backed CVPixelBuffer export is not reliably reentrant
+    /// across concurrent host/Worker jobs on all macOS GPU/codec combinations.
+    /// Distributed segments share one explicit gate so ordering never depends on
+    /// incidental test or scheduler timing.
+    private static let distributedSegmentExportLock = NSLock()
     static func export(
         volume: CPUVolume,
         request: VideoExportRequest,
@@ -1497,7 +1505,7 @@ enum VideoExportHelper {
             ? buildPlaneExportCache(volume: volume, request: request)
             : nil
 
-        let shouldUseGPU = meshSliceCache == nil
+        let shouldUseGPU = !request.preferCPUExport && meshSliceCache == nil
             && (request.mode == .plane || request.mode == .axis)
         let gpuContext: GPUExportContext? = shouldUseGPU
             ? (try? GPUExportContext(
@@ -3481,9 +3489,9 @@ enum VideoExportHelper {
             nMax = max(nMax, pn)
         }
 
-        let fullW = max(1, Int(ceil(uMax - uMin)))
-        let fullH = max(1, Int(ceil(vMax - vMin)))
-        let fullSlices = max(1, Int(ceil(nMax - nMin)))
+        let fullW = max(1, Int(ceil(uMax - uMin)) + 1)
+        let fullH = max(1, Int(ceil(vMax - vMin)) + 1)
+        let fullSlices = max(1, Int(ceil(nMax - nMin)) + 1)
         let longSide = max(fullW, fullH)
         let scale = longSide > maxLongSide ? Float(maxLongSide) / Float(longSide) : 1.0
 
@@ -4670,6 +4678,73 @@ enum VideoExportHelper {
         colorProfile: VideoColorProfile = .rec709,
         progress: @escaping ExportProgressHandler
     ) throws {
+        distributedSegmentExportLock.lock()
+        defer { distributedSegmentExportLock.unlock() }
+        if let preparedCPUVolume {
+            guard bitDepth <= 8 else {
+                throw VideoExportError.createWriterFailed(
+                    "Worker external-alpha CPUVolume 为 RGBA8，不能用于 \(bitDepth)-bit 高精度输出；已拒绝静默降精度"
+                )
+            }
+            if mode == .plane {
+                try exportDistributedPlaneSegmentFromVolume(
+                    volume: preparedCPUVolume,
+                    outputURL: outputURL,
+                    referencePlane: referencePlane,
+                    fps: fps,
+                    preserveAlpha: preserveAlpha,
+                    padToEven: padToEven,
+                    qualityScale: qualityScale,
+                    outputStartFrame: outputStartFrame,
+                    outputEndFrame: outputEndFrame,
+                    bitDepth: bitDepth,
+                    progress: progress
+                )
+                return
+            }
+
+            guard axis == .x || axis == .y else {
+                throw VideoExportError.createWriterFailed("Worker CPUVolume 分段仅支持 X / Y / 参考面")
+            }
+            let baseWidth = axis == .x ? preparedCPUVolume.depth : preparedCPUVolume.width
+            let baseHeight = axis == .x ? preparedCPUVolume.height : preparedCPUVolume.depth
+            let upperBound = max(0, (axis == .x ? preparedCPUVolume.width : preparedCPUVolume.height) - 1)
+            let range = normalizedOutputRange(
+                start: outputStartFrame,
+                end: outputEndFrame,
+                upperBound: upperBound
+            )
+            guard range.end >= range.start else {
+                throw VideoExportError.createWriterFailed("Worker CPUVolume 轴分段范围无效")
+            }
+            let request = VideoExportRequest(
+                url: outputURL,
+                width: scaledDistributedDimension(baseWidth, qualityScale: qualityScale, padToEven: padToEven),
+                height: scaledDistributedDimension(baseHeight, qualityScale: qualityScale, padToEven: padToEven),
+                fps: fps,
+                frameCount: range.end - range.start + 1,
+                mode: .axis,
+                axis: axis,
+                showCheckerboard: false,
+                useAlpha: preserveAlpha,
+                preserveAlpha: preserveAlpha,
+                padToEven: padToEven,
+                highPrecision: false,
+                sourceFrameCount: preparedCPUVolume.depth,
+                playbackRate: 1,
+                sourceURL: nil,
+                referencePlane: ReferencePlaneState(),
+                outputStartFrame: range.start,
+                outputEndFrame: range.end,
+                bitDepth: 8,
+                colorProfile: preparedCPUVolume.sourceColorProfile,
+                preferCPUExport: true
+            )
+            progress(0, preserveAlpha ? "Worker 合并体 X/Y 分段（带 external Alpha）" : "Worker 合并体 X/Y 分段")
+            try exportRendered(volume: preparedCPUVolume, request: request, progress: progress)
+            return
+        }
+
         if mode == .plane {
             try exportHighPrecisionDistributedPlaneSegment(
                 outputURL: outputURL,
@@ -4774,7 +4849,9 @@ enum VideoExportHelper {
         colorProfile: VideoColorProfile,
         progress: @escaping ExportProgressHandler
     ) throws {
-        _ = preparedCPUVolume
+        if preparedCPUVolume != nil {
+            throw VideoExportError.createWriterFailed("内部错误：参考面 preparedCPUVolume 未进入体数据渲染路径")
+        }
         let metrics = highPrecisionPlaneOutputMetrics(
             sourceWidth: sourceWidth,
             sourceHeight: sourceHeight,
@@ -4825,6 +4902,7 @@ enum VideoExportHelper {
         qualityScale: Double,
         outputStartFrame: Int,
         outputEndFrame: Int,
+        bitDepth: Int = 8,
         progress: @escaping ExportProgressHandler
     ) throws {
         let geometry = volume.planeGeometry(for: referencePlane)
@@ -4866,7 +4944,9 @@ enum VideoExportHelper {
             referencePlane: referencePlane,
             outputStartFrame: range.start,
             outputEndFrame: range.end,
-            colorProfile: volume.sourceColorProfile
+            bitDepth: bitDepth,
+            colorProfile: volume.sourceColorProfile,
+            preferCPUExport: true
         )
 
         let routeText = preserveAlpha ? "参考面视频会话导出（带 Alpha）" : "参考面视频会话导出"

@@ -310,9 +310,9 @@ final class SliceRenderer: NSObject, MTKViewDelegate {
             nMax = max(nMax, pn)
         }
 
-        let fullW = max(1, Int(ceil(uMax - uMin)))
-        let fullH = max(1, Int(ceil(vMax - vMin)))
-        let fullSlices = max(1, Int(ceil(nMax - nMin)))
+        let fullW = max(1, Int(ceil(uMax - uMin)) + 1)
+        let fullH = max(1, Int(ceil(vMax - vMin)) + 1)
+        let fullSlices = max(1, Int(ceil(nMax - nMin)) + 1)
 
         let longSide = max(fullW, fullH)
         let scale = longSide > maxLongSide ? Float(maxLongSide) / Float(longSide) : 1.0

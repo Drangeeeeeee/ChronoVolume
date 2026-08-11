@@ -138,9 +138,12 @@ func makePlaneGeometry(
         nMax = max(nMax, pn)
     }
 
-    let fullW = max(1, Int(ceil(uMax - uMin)))
-    let fullH = max(1, Int(ceil(vMax - vMin)))
-    let fullSlices = max(1, Int(ceil(nMax - nMin)))
+    // u/v/n bounds describe inclusive voxel-center coordinates.  The number
+    // of samples is therefore span + 1; omitting the endpoint dropped the
+    // last reference-plane frame and resampled a 4-frame volume to 3 slices.
+    let fullW = max(1, Int(ceil(uMax - uMin)) + 1)
+    let fullH = max(1, Int(ceil(vMax - vMin)) + 1)
+    let fullSlices = max(1, Int(ceil(nMax - nMin)) + 1)
 
     let longSide = max(fullW, fullH)
     let scale = longSide > maxLongSide ? Float(maxLongSide) / Float(longSide) : 1.0
@@ -199,9 +202,9 @@ func makePlaneGeometry(
         nMax = max(nMax, pn)
     }
 
-    let fullW = max(1, Int(ceil(uMax - uMin)))
-    let fullH = max(1, Int(ceil(vMax - vMin)))
-    let fullSlices = max(1, Int(ceil(nMax - nMin)))
+    let fullW = max(1, Int(ceil(uMax - uMin)) + 1)
+    let fullH = max(1, Int(ceil(vMax - vMin)) + 1)
+    let fullSlices = max(1, Int(ceil(nMax - nMin)) + 1)
     let longSide = max(fullW, fullH)
     let scale = longSide > maxLongSide ? Float(maxLongSide) / Float(longSide) : 1.0
 
@@ -228,6 +231,8 @@ struct CPUVolume: Sendable {
     let rgba: [UInt8]   // [t][y][x][rgba]
     let hasMeaningfulAlpha: Bool
     var sourceColorProfile: VideoColorProfile = .rec709
+    var presentationTimes: [Double] = []
+    var alphaAssociation: AlphaAssociation = .straight
 
     private var halfX: Float { Float(width - 1) * 0.5 }
     private var halfY: Float { Float(height - 1) * 0.5 }

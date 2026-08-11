@@ -28,6 +28,29 @@ final class ChronoVolumeUITests: XCTestCase {
     }
 
     @MainActor
+    func testAlphaCheaterImporterIsTopLevelAndMediaActionsAreContextual() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        if !app.windows.firstMatch.waitForExistence(timeout: 2) {
+            app.menuBars.menuBarItems["File"].click()
+            app.menuItems["New Window"].click()
+        }
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 5))
+
+        let importVideo = app.buttons["导入视频/模型"]
+        let importAlphaCheater = app.buttons["导入AlphaCheater"]
+        XCTAssertTrue(importVideo.waitForExistence(timeout: 5))
+        XCTAssertTrue(importAlphaCheater.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(importAlphaCheater.frame.midY, importVideo.frame.midY)
+        XCTAssertFalse(app.buttons["打开 A_color"].exists)
+        XCTAssertFalse(app.buttons["添加 A_color"].exists)
+        XCTAssertFalse(app.buttons["添加 B_alpha"].exists)
+        XCTAssertFalse(app.buttons["移除 A_color"].exists)
+        XCTAssertFalse(app.buttons["移除 B_alpha"].exists)
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {

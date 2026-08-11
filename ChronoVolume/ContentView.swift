@@ -8,13 +8,250 @@ private enum CameraControlLimits {
     static let focusRange: ClosedRange<Double> = -100.0...100.0
 }
 
-private struct MainImportedVideo: Identifiable, Hashable {
+struct MainImportedVideo: Identifiable, Hashable, Sendable {
+    struct RestorationResult: Sendable {
+        let item: MainImportedVideo
+        let pairingDiagnostic: String?
+    }
+
     let id: UUID
-    let url: URL
-    var name: String { url.lastPathComponent }
-    var isModel: Bool { MeshVolumeLoader.isSupportedModelURL(url) }
+    var sourcePair: VideoSourcePair
+    var isAlphaCheater: Bool
+    var pairingKey: String?
+    var url: URL { sourcePair.colorURL }
+    var name: String {
+        if sourcePair.usesGeneratedWhiteColor {
+            return sourcePair.alphaURL?.lastPathComponent ?? url.lastPathComponent
+        }
+        return url.lastPathComponent
+    }
+    var hasColorSource: Bool { !sourcePair.usesGeneratedWhiteColor }
+    var hasAlphaSource: Bool { sourcePair.alphaURL != nil }
+    var isModel: Bool { !isAlphaCheater && MeshVolumeLoader.isSupportedModelURL(url) }
     var pickerTitle: String {
-        isModel ? "\(name)（模型）" : name
+        if isModel { return "\(name)（模型）" }
+        guard isAlphaCheater else { return name }
+        let state = hasColorSource && hasAlphaSource ? "A+B" : (hasColorSource ? "仅 A" : "仅 B · 白模")
+        return "\(name)（AlphaCheater · \(state)）"
+    }
+
+    init(id: UUID, url: URL) {
+        self.id = id
+        self.isAlphaCheater = false
+        self.pairingKey = nil
+        let alphaURL = VideoSourcePairDiscovery.matchingAlphaURL(for: url)
+        self.sourcePair = VideoSourcePair(
+            colorURL: url,
+            alphaURL: alphaURL,
+            alphaSourceMode: alphaURL == nil ? .opaque : .external
+        )
+    }
+
+    init(
+        id: UUID,
+        sourcePair: VideoSourcePair,
+        isAlphaCheater: Bool = false,
+        pairingKey: String? = nil
+    ) {
+        self.id = id
+        self.sourcePair = sourcePair
+        self.isAlphaCheater = isAlphaCheater
+        self.pairingKey = isAlphaCheater
+            ? (pairingKey ?? VideoSourcePairDiscovery.pairingKey(for: sourcePair))
+            : nil
+    }
+
+    static func restoring(
+        from record: ChronoVolumeProjectDocument.MainVideoRecord
+    ) -> MainImportedVideo {
+        restorationResult(from: record).item
+    }
+
+    static func restoring(
+        from record: ChronoVolumeProjectDocument.MainVideoRecord,
+        bookmarkResolver: (Data?) -> URL?
+    ) -> MainImportedVideo {
+        restorationResult(
+            from: record,
+            bookmarkResolver: bookmarkResolver
+        ).item
+    }
+
+    static func restorationResult(
+        from record: ChronoVolumeProjectDocument.MainVideoRecord
+    ) -> RestorationResult {
+        restorationResult(from: record, resolvedSourcePair: record.resolvedSourcePair())
+    }
+
+    static func restorationResult(
+        from record: ChronoVolumeProjectDocument.MainVideoRecord,
+        bookmarkResolver: (Data?) -> URL?
+    ) -> RestorationResult {
+        restorationResult(
+            from: record,
+            resolvedSourcePair: record.resolvedSourcePair(bookmarkResolver: bookmarkResolver)
+        )
+    }
+
+    private static func restorationResult(
+        from record: ChronoVolumeProjectDocument.MainVideoRecord,
+        resolvedSourcePair: VideoSourcePair
+    ) -> RestorationResult {
+        let isAlphaCheater = record.isAlphaCheater ?? false
+        let identity = isAlphaCheater
+            ? VideoSourcePairDiscovery.restoredPairingIdentity(
+                for: resolvedSourcePair,
+                persistedKey: record.pairingKey
+            )
+            : .init(pairingKey: nil, diagnostic: nil)
+        let item = MainImportedVideo(
+            id: record.id,
+            sourcePair: resolvedSourcePair,
+            isAlphaCheater: isAlphaCheater,
+            pairingKey: identity.pairingKey
+        )
+        return RestorationResult(
+            item: item,
+            pairingDiagnostic: identity.diagnostic
+        )
+    }
+}
+
+struct AlphaCheaterImportMergeResult: Sendable {
+    var videos: [MainImportedVideo]
+    var firstMatchedID: UUID?
+    var conflicts: [VideoSourcePairDiscovery.RoleConflict]
+}
+
+enum AlphaCheaterImportedVideoState {
+    struct SettingsUpdateResult: Sendable {
+        let item: MainImportedVideo
+        let requiresReload: Bool
+    }
+
+    static func merge(
+        _ classification: VideoSourcePairDiscovery.AlphaCheaterImportClassification,
+        into existingVideos: [MainImportedVideo],
+        makeID: () -> UUID = UUID.init
+    ) -> AlphaCheaterImportMergeResult {
+        var videos = existingVideos
+        var firstMatchedID: UUID?
+        var conflicts = classification.roleConflicts
+
+        for group in classification.groups {
+            if let index = videos.firstIndex(where: {
+                $0.isAlphaCheater && $0.pairingKey == group.pairingKey
+            }) {
+                var item = videos[index]
+                firstMatchedID = firstMatchedID ?? item.id
+
+                if let incomingColor = group.colorURL {
+                    if item.hasColorSource {
+                        if !VideoSourcePairDiscovery.urlsReferToSameFile(
+                            item.sourcePair.colorURL,
+                            incomingColor
+                        ) {
+                            conflicts.append(.init(
+                                pairingKey: group.pairingKey,
+                                role: .color,
+                                keptURL: item.sourcePair.colorURL,
+                                incomingURL: incomingColor
+                            ))
+                        }
+                    } else {
+                        item = addingColor(incomingColor, to: item)
+                    }
+                }
+
+                if let incomingAlpha = group.alphaURL {
+                    if let keptAlpha = item.sourcePair.alphaURL {
+                        if !VideoSourcePairDiscovery.urlsReferToSameFile(keptAlpha, incomingAlpha) {
+                            conflicts.append(.init(
+                                pairingKey: group.pairingKey,
+                                role: .alpha,
+                                keptURL: keptAlpha,
+                                incomingURL: incomingAlpha
+                            ))
+                        }
+                    } else {
+                        item = addingAlpha(incomingAlpha, to: item)
+                    }
+                }
+                videos[index] = item
+            } else {
+                let item = MainImportedVideo(
+                    id: makeID(),
+                    sourcePair: group.sourcePair,
+                    isAlphaCheater: true,
+                    pairingKey: group.pairingKey
+                )
+                videos.append(item)
+                firstMatchedID = firstMatchedID ?? item.id
+            }
+        }
+
+        return AlphaCheaterImportMergeResult(
+            videos: videos,
+            firstMatchedID: firstMatchedID,
+            conflicts: conflicts
+        )
+    }
+
+    static func addingColor(_ url: URL, to item: MainImportedVideo) -> MainImportedVideo {
+        guard item.isAlphaCheater, !item.hasColorSource, item.hasAlphaSource else { return item }
+        var result = item
+        result.sourcePair.colorURL = url
+        result.sourcePair.usesGeneratedWhiteColor = false
+        result.sourcePair.alphaSourceMode = .external
+        return result
+    }
+
+    static func addingAlpha(_ url: URL, to item: MainImportedVideo) -> MainImportedVideo {
+        guard item.isAlphaCheater, item.hasColorSource, !item.hasAlphaSource else { return item }
+        var result = item
+        result.sourcePair.alphaURL = url
+        result.sourcePair.alphaSourceMode = .external
+        result.sourcePair.usesGeneratedWhiteColor = false
+        return result
+    }
+
+    static func removingColor(from item: MainImportedVideo) -> MainImportedVideo {
+        guard item.isAlphaCheater,
+              item.hasColorSource,
+              let alphaURL = item.sourcePair.alphaURL else { return item }
+        var result = item
+        result.sourcePair.colorURL = alphaURL
+        result.sourcePair.alphaURL = alphaURL
+        result.sourcePair.alphaSourceMode = .external
+        result.sourcePair.usesGeneratedWhiteColor = true
+        result.sourcePair.externalAlphaSettings = result.sourcePair.externalAlphaSettings
+            .applyingGeneratedWhiteColorSemantics(true)
+        return result
+    }
+
+    static func removingAlpha(from item: MainImportedVideo) -> MainImportedVideo {
+        guard item.isAlphaCheater, item.hasColorSource, item.hasAlphaSource else { return item }
+        var result = item
+        result.sourcePair.alphaURL = nil
+        result.sourcePair.alphaSourceMode = .opaque
+        result.sourcePair.usesGeneratedWhiteColor = false
+        return result
+    }
+
+    static func updatingExternalAlphaSettings(
+        _ settings: ExternalAlphaSettings,
+        for item: MainImportedVideo
+    ) -> SettingsUpdateResult {
+        let effectiveSettings = settings.applyingGeneratedWhiteColorSemantics(
+            item.sourcePair.usesGeneratedWhiteColor
+        )
+        guard effectiveSettings != item.sourcePair.externalAlphaSettings else {
+            return SettingsUpdateResult(item: item, requiresReload: false)
+        }
+        var result = item
+        result.sourcePair.externalAlphaSettings = effectiveSettings
+        result.sourcePair.alphaSourceMode = result.sourcePair.alphaURL == nil ? .opaque : .external
+        return SettingsUpdateResult(item: result, requiresReload: true)
     }
 }
 
@@ -400,6 +637,11 @@ struct ContentView: View {
                     }
                 }
 
+                Button("导入AlphaCheater") {
+                    chooseAlphaCheater()
+                }
+                .help("可多选 A_color / B_alpha；按文件名自动配对，也支持只导入一路")
+
                 mediaStatusPanel
 
                 Picker("工作区", selection: $selectedTab) {
@@ -453,11 +695,99 @@ struct ContentView: View {
                     }
                 }
 
+                if let item = selectedImportedVideo, item.isAlphaCheater {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(alphaCheaterSourceSummary(item))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        HStack {
+                            if item.hasColorSource && !item.hasAlphaSource {
+                                Button("添加 B_alpha") { chooseAlphaVideo() }
+                            } else if !item.hasColorSource && item.hasAlphaSource {
+                                Button("添加 A_color") { chooseColorVideoForSelectedAlphaCheater() }
+                            } else if item.hasColorSource && item.hasAlphaSource {
+                                Button("移除 A_color") { removeSelectedColorSource() }
+                                Button("移除 B_alpha") { removeSelectedExternalAlpha() }
+                            }
+                        }
+                    }
+                }
+
                 Text("状态：\(model.status)")
                     .foregroundStyle(.secondary)
 
                 Text("Alpha：\(model.alphaInfo)")
                     .lineLimit(2)
+
+                if let color = model.colorSourceMetadata,
+                   selectedImportedVideo?.sourcePair.usesGeneratedWhiteColor != true {
+                    DisclosureGroup("A_color 属性") {
+                        sourceMetadataView(color, isAlpha: false)
+                    }
+                } else if selectedImportedVideo?.sourcePair.usesGeneratedWhiteColor == true {
+                    Text("A_color：未添加；RGB 使用 (1, 1, 1) 直通白模，透明度来自 B_alpha")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let alpha = model.alphaSourceMetadata,
+                   let pair = model.videoSourcePair {
+                    DisclosureGroup("B_alpha 属性") {
+                        sourceMetadataView(alpha, isAlpha: true)
+                        if pair.usesGeneratedWhiteColor {
+                            Text("通道：\(pair.externalAlphaSettings.channel.rawValue) · 反转：\(pair.externalAlphaSettings.invert ? "是" : "否") · 范围：\(pair.externalAlphaSettings.range.rawValue)")
+                        } else {
+                            Text("通道：\(pair.externalAlphaSettings.channel.rawValue) · 反转：\(pair.externalAlphaSettings.invert ? "是" : "否") · 同步：\(model.alphaSyncStatus)")
+                        }
+                        Text("精度：源 \(model.sourceAlphaBitDepth)-bit；RGBA8 交互预览 \(model.previewAlphaBitDepth)-bit；高精度旁路不经过预览 Alpha")
+                    }
+
+                    Picker("B_alpha 预览", selection: Binding(
+                        get: { model.externalAlphaPreviewMode },
+                        set: { model.setExternalAlphaPreviewMode($0) }
+                    )) {
+                        ForEach(ExternalAlphaPreviewMode.allCases) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+
+                    DisclosureGroup("B_alpha 解释与兼容策略") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Picker("取值通道", selection: alphaSettingBinding(\.channel)) {
+                                ForEach(ExternalAlphaChannel.allCases) { Text($0.rawValue).tag($0) }
+                            }
+                            Toggle("反转", isOn: alphaSettingBinding(\.invert))
+                            Picker("范围", selection: alphaSettingBinding(\.range)) {
+                                ForEach(ExternalAlphaRange.allCases) { Text($0.rawValue).tag($0) }
+                            }
+                            if ExternalAlphaSettingsAvailability.editableSettings(for: pair).contains(.association) {
+                                Picker("A_color Alpha 关联", selection: alphaSettingBinding(\.association)) {
+                                    ForEach(AlphaAssociation.allCases) { association in
+                                        Text(association == .straight ? "Straight（RGB 未预乘）" : "Premultiplied（按 B_alpha 反预乘）")
+                                            .tag(association)
+                                    }
+                                }
+                                Text("Premultiplied 输入在 B_alpha=0 处无法恢复被清零的 RGB；加载诊断会报告此类像素。")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Picker("同步", selection: alphaSettingBinding(\.syncPolicy)) {
+                                    ForEach(ExternalAlphaSyncPolicy.allCases) { Text($0.rawValue).tag($0) }
+                                }
+                                Picker("尺寸", selection: alphaSettingBinding(\.resizePolicy)) {
+                                    ForEach(ExternalAlphaResizePolicy.allCases) { Text($0.rawValue).tag($0) }
+                                }
+                                Text("nearest/resample/scale/trim 仅在这里显式选择，默认 strict 不会静默兼容。")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("B-only 白模固定按 Straight Alpha 解释；同步与尺寸匹配由 B_alpha 自身时间线和显示尺寸决定。")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
+                }
 
                 if model.sourceDurationSeconds > 0 {
                     Text(
@@ -493,6 +823,33 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    @ViewBuilder
+    private func sourceMetadataView(_ metadata: VideoSourceMetadata, isAlpha: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("\(metadata.fileName) · \(metadata.container) · \(metadata.codec)")
+            Text("\(metadata.displayWidth) × \(metadata.displayHeight) · 旋转 \(metadata.rotationDegrees)° · \(String(format: "%.6f", metadata.fps)) fps")
+            Text("\(String(format: "%.6f", metadata.durationSeconds)) 秒 · \(metadata.frameCount) 帧 · time base \(metadata.timeBase)")
+            Text("\(metadata.pixelFormat) · \(metadata.bitDepth)-bit · range \(metadata.range.rawValue)")
+            if !isAlpha {
+                Text("primaries \(metadata.colorPrimaries) · transfer \(metadata.transfer) · matrix \(metadata.matrix) · 内嵌 Alpha \(metadata.hasEmbeddedAlpha ? "是" : "否")")
+            }
+        }
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .padding(.top, 4)
+    }
+
+    private func alphaSettingBinding<Value>(_ keyPath: WritableKeyPath<ExternalAlphaSettings, Value>) -> Binding<Value> {
+        Binding(
+            get: { model.videoSourcePair?.externalAlphaSettings[keyPath: keyPath] ?? ExternalAlphaSettings()[keyPath: keyPath] },
+            set: { value in
+                guard var settings = model.videoSourcePair?.externalAlphaSettings else { return }
+                settings[keyPath: keyPath] = value
+                updateSelectedExternalAlphaSettings(settings)
+            }
+        )
     }
 
     private var twoDControlsPanel: some View {
@@ -652,6 +1009,7 @@ struct ContentView: View {
                     settings: distributedSettings,
                     currentAxisTitle: model.sliceMode == .plane ? "参考面" : (model.playbackAxis == .x ? "X" : "Y"),
                     totalOutputFrames: model.distributedOutputFrameCount,
+                    pairedPrecisionNotice: distributedPairedPrecisionNotice,
                     onTestAllWorkers: {
                         model.testAllWorkerConnectionsAndPrepare(settings: distributedSettings)
                     },
@@ -685,6 +1043,15 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var distributedPairedPrecisionNotice: String? {
+        guard let pair = model.videoSourcePair,
+              pair.alphaSourceMode == .external else { return nil }
+        if pair.usesGeneratedWhiteColor {
+            return ExternalPairedRenderPolicy.generatedWhiteDistributedNotice
+        }
+        return "A_color + B_alpha 当前使用 RGBA8 paired renderer；颜色、Alpha 或输出任一路高于 8-bit 时会在传输前明确拒绝。"
     }
 
     private var volumeRenderPanel: some View {
@@ -1440,6 +1807,143 @@ struct ContentView: View {
         }
     }
 
+    private func chooseAlphaCheater() {
+        let panel = NSOpenPanel()
+        panel.title = "导入 AlphaCheater（可多选 A_color / B_alpha）"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = alphaCapableVideoContentTypes
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+
+        let classification = VideoSourcePairDiscovery.classifyAlphaCheaterURLs(panel.urls)
+        guard !classification.groups.isEmpty else {
+            model.status = "未识别到 AlphaCheater 文件。请使用 name_A_color / name_B_alpha、name-A_color / name-B_alpha 或 A_color / B_alpha 命名。"
+            return
+        }
+
+        let previousPairs = Dictionary(uniqueKeysWithValues: importedVideos.map { ($0.id, $0.sourcePair) })
+        let merge = AlphaCheaterImportedVideoState.merge(classification, into: importedVideos)
+        importedVideos = merge.videos
+        if let firstID = merge.firstMatchedID,
+           let item = importedVideos.first(where: { $0.id == firstID }) {
+            if selectedImportedVideoID == firstID {
+                if previousPairs[firstID] != item.sourcePair {
+                    model.loadVideo(pair: item.sourcePair, restoring: model.makeProjectState())
+                }
+            } else {
+                selectImportedVideo(id: firstID)
+            }
+        }
+
+        var diagnostics: [String] = ["已识别 \(classification.groups.count) 组 AlphaCheater 素材"]
+        if !classification.unrecognized.isEmpty {
+            diagnostics.append("未识别：\(classification.unrecognized.map(\.lastPathComponent).joined(separator: "、"))")
+        }
+        if !merge.conflicts.isEmpty {
+            diagnostics.append(merge.conflicts.map(\.diagnostic).joined(separator: "；"))
+        }
+        model.status = diagnostics.joined(separator: "；")
+        runtimeAudit.record(.success, category: "素材", title: "导入 AlphaCheater", message: model.status)
+    }
+
+    private func chooseColorVideoForSelectedAlphaCheater() {
+        let panel = NSOpenPanel()
+        panel.title = "添加 A_color"
+        panel.message = "添加真实 A_color 后将恢复 association、同步和尺寸匹配设置。"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = alphaCapableVideoContentTypes
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let index = selectedImportedVideoIndex,
+              importedVideos[index].isAlphaCheater,
+              importedVideos[index].sourcePair.usesGeneratedWhiteColor else {
+            model.status = "当前素材不是仅含 B_alpha 的 AlphaCheater 素材"
+            return
+        }
+        let item = AlphaCheaterImportedVideoState.addingColor(url, to: importedVideos[index])
+        importedVideos[index] = item
+        model.loadVideo(pair: item.sourcePair, restoring: model.makeProjectState())
+    }
+
+    private func chooseAlphaVideo() {
+        let panel = NSOpenPanel()
+        panel.title = "添加 B_alpha（支持 MKV + FFV1 gray16le）"
+        panel.message = "gray10/12/16le 可用于交互预览，但当前不能进入高于 8-bit 的 paired 分布式导出。"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = alphaCapableVideoContentTypes
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let index = selectedImportedVideoIndex,
+              importedVideos[index].isAlphaCheater,
+              importedVideos[index].hasColorSource,
+              !importedVideos[index].hasAlphaSource else {
+            model.status = "请先选择仅含 A_color 的 AlphaCheater 素材"
+            return
+        }
+        let item = AlphaCheaterImportedVideoState.addingAlpha(url, to: importedVideos[index])
+        importedVideos[index] = item
+        model.loadVideo(pair: item.sourcePair, restoring: model.makeProjectState())
+    }
+
+    private var selectedImportedVideoIndex: Int? {
+        guard let selectedImportedVideoID else { return nil }
+        return importedVideos.firstIndex { $0.id == selectedImportedVideoID }
+    }
+
+    private var selectedImportedVideo: MainImportedVideo? {
+        guard let selectedImportedVideoIndex else { return nil }
+        return importedVideos[selectedImportedVideoIndex]
+    }
+
+    private func alphaCheaterSourceSummary(_ item: MainImportedVideo) -> String {
+        let color = item.hasColorSource ? item.sourcePair.colorURL.lastPathComponent : "未添加（白模）"
+        let alpha = item.sourcePair.alphaURL?.lastPathComponent ?? "未添加"
+        return "AlphaCheater｜A_color：\(color)｜B_alpha：\(alpha)"
+    }
+
+    private func removeSelectedExternalAlpha() {
+        guard let index = selectedImportedVideoIndex,
+              importedVideos[index].isAlphaCheater,
+              importedVideos[index].hasColorSource,
+              importedVideos[index].hasAlphaSource else { return }
+        let item = AlphaCheaterImportedVideoState.removingAlpha(from: importedVideos[index])
+        importedVideos[index] = item
+        model.loadVideo(pair: item.sourcePair, restoring: model.makeProjectState())
+    }
+
+    private func removeSelectedColorSource() {
+        guard let index = selectedImportedVideoIndex,
+              importedVideos[index].isAlphaCheater,
+              importedVideos[index].hasColorSource else { return }
+        let item = AlphaCheaterImportedVideoState.removingColor(from: importedVideos[index])
+        importedVideos[index] = item
+        model.loadVideo(pair: item.sourcePair, restoring: model.makeProjectState())
+    }
+
+    private func updateSelectedExternalAlphaSettings(_ settings: ExternalAlphaSettings) {
+        guard let index = selectedImportedVideoIndex else { return }
+        let update = AlphaCheaterImportedVideoState.updatingExternalAlphaSettings(
+            settings,
+            for: importedVideos[index]
+        )
+        guard update.requiresReload else { return }
+        importedVideos[index] = update.item
+        model.loadVideo(pair: update.item.sourcePair, restoring: model.makeProjectState())
+    }
+
+    private var alphaCapableVideoContentTypes: [UTType] {
+        var types: [UTType] = [.movie, .audiovisualContent]
+        for ext in ["mkv", "mov", "mp4", "m4v", "avi", "webm"] {
+            if let type = UTType(filenameExtension: ext), !types.contains(type) {
+                types.append(type)
+            }
+        }
+        return types
+    }
+
     private var importableContentTypes: [UTType] {
         var types: [UTType] = [.movie]
         for ext in MeshVolumeLoader.supportedFileExtensions.sorted() {
@@ -1483,7 +1987,7 @@ struct ContentView: View {
             selectedTab = 1
             model.loadStaticMesh(url: item.url)
         } else {
-            model.loadVideo(url: item.url)
+            model.loadVideo(pair: item.sourcePair)
         }
     }
 
@@ -1556,10 +2060,19 @@ struct ContentView: View {
         document.autosaveCreatedAt = autosaveOriginalProjectPath == nil ? nil : Date()
         document.selectedTab = selectedTab
         document.mainVideos = importedVideos.map {
-            ChronoVolumeProjectDocument.MainVideoRecord(
+            let sourcePair = $0.sourcePair
+            return ChronoVolumeProjectDocument.MainVideoRecord(
                 id: $0.id,
                 path: $0.url.path,
-                name: $0.name
+                name: $0.name,
+                colorBookmark: securityScopedBookmark(for: $0.url),
+                alphaPath: sourcePair.alphaURL?.path,
+                alphaBookmark: sourcePair.alphaURL.flatMap(securityScopedBookmark),
+                alphaSourceMode: sourcePair.alphaSourceMode,
+                externalAlphaSettings: sourcePair.externalAlphaSettings,
+                usesGeneratedWhiteColor: sourcePair.usesGeneratedWhiteColor,
+                isAlphaCheater: $0.isAlphaCheater,
+                pairingKey: $0.pairingKey
             )
         }
         document.selectedMainVideoID = selectedImportedVideoID
@@ -1568,6 +2081,14 @@ struct ContentView: View {
         document.distributed = distributedSettings.makeProjectState()
         document.composition = compositionModel.makeProjectState()
         return document
+    }
+
+    private func securityScopedBookmark(for url: URL) -> Data? {
+        try? url.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
     }
 
     private var autosaveRecoveryURL: URL {
@@ -1774,14 +2295,23 @@ struct ContentView: View {
         distributedSettings.restoreProjectState(document.distributed)
         compositionModel.restoreProjectState(document.composition)
 
-        var restoredVideos = document.mainVideos.map {
-            MainImportedVideo(id: $0.id, url: $0.url)
+        let mainRestorationResults = document.mainVideos.map {
+            MainImportedVideo.restorationResult(from: $0)
         }
+        var restoredVideos = mainRestorationResults.map(\.item)
         for asset in document.composition.assets
         where !restoredVideos.contains(where: { $0.url.path == asset.path }) {
             restoredVideos.append(MainImportedVideo(id: asset.id, url: asset.url))
         }
         importedVideos = restoredVideos
+        for diagnostic in mainRestorationResults.compactMap(\.pairingDiagnostic) {
+            runtimeAudit.record(
+                .warning,
+                category: "项目",
+                title: "AlphaCheater 配对身份兼容",
+                message: diagnostic
+            )
+        }
 
         let restoredSelectedID = document.selectedMainVideoID.flatMap { id in
             restoredVideos.contains(where: { $0.id == id }) ? id : nil
@@ -1794,7 +2324,7 @@ struct ContentView: View {
             if selectedVideo.isModel {
                 model.loadStaticMesh(url: selectedVideo.url, restoring: document.appState)
             } else {
-                model.loadVideo(url: selectedVideo.url, restoring: document.appState)
+                model.loadVideo(pair: selectedVideo.sourcePair, restoring: document.appState)
             }
         } else {
             model.restoreProjectState(document.appState)

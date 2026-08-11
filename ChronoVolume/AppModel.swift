@@ -112,6 +112,13 @@ final class AppModel: ObservableObject {
     @Published var sourceFrameCount: Int = 0
     @Published var sourceBitDepth: Int = 8
     @Published var sourceColorProfile: VideoColorProfile = .rec709
+    @Published var sourceAlphaBitDepth: Int = 8
+    @Published var previewAlphaBitDepth: Int = 8
+    @Published var videoSourcePair: VideoSourcePair?
+    @Published var colorSourceMetadata: VideoSourceMetadata?
+    @Published var alphaSourceMetadata: VideoSourceMetadata?
+    @Published var alphaSyncStatus: String = "单源"
+    @Published var externalAlphaPreviewMode: ExternalAlphaPreviewMode = .checkerboardTransparency
     @Published var fullTemporalDepthCount: Int = 0
     @Published var previewDepthCount: Int = 0
     @Published var bestVisibleTIndex: Int = 0
@@ -127,6 +134,9 @@ final class AppModel: ObservableObject {
     // 保持为 stored property，供导出扩展通过 Mirror 读取
     private var fullCPUVolume: CPUVolume?
     private var fullLoadedVolume: LoadedVolume?
+    private(set) var highPrecisionAlphaVolume: HighPrecisionAlphaVolume?
+    var highPrecisionPairedCPUVolume: CPUVolume?
+    private var externalAlphaMaskPreviewVolume: LoadedVolume?
     private var pendingPreviewVolume: LoadedVolume?
     private var originalMeshSurface: LoadedMesh?
     private var fullMeshSurface: LoadedMesh?
@@ -169,7 +179,7 @@ final class AppModel: ObservableObject {
     }
 
     var usesGeneratedTimeAxisPreview: Bool {
-        hasMeshSlicePreview || isVideoVolumeModifierActive
+        hasMeshSlicePreview || isVideoVolumeModifierActive || videoSourcePair?.alphaSourceMode == .external
     }
 
     var selectedMeshModifierState: MeshModifierState {
@@ -185,7 +195,7 @@ final class AppModel: ObservableObject {
         return meshModifierStack.indices.first
     }
     private var pendingProjectStateAfterLoad: ChronoVolumeProjectDocument.AppProjectState?
-    private var videoLoadCache: [URL: CachedVideoLoad] = [:]
+    private var videoLoadCache: [VideoSourcePair: CachedVideoLoad] = [:]
     private var meshLoadCache: [URL: CachedMeshLoad] = [:]
     var lastDistributedStatusBarUpdate: Date = .distantPast
 
@@ -1155,6 +1165,12 @@ final class AppModel: ObservableObject {
         sourceFrameCount = 0
         sourceBitDepth = 8
         sourceColorProfile = .rec709
+        sourceAlphaBitDepth = 8
+        previewAlphaBitDepth = 8
+        videoSourcePair = nil
+        colorSourceMetadata = nil
+        alphaSourceMetadata = nil
+        alphaSyncStatus = "单源"
         fullTemporalDepthCount = 0
         previewDepthCount = 0
         bestVisibleTIndex = 0
@@ -1162,6 +1178,10 @@ final class AppModel: ObservableObject {
         currentIndex = 0
         fullCPUVolume = nil
         fullLoadedVolume = nil
+        highPrecisionAlphaVolume = nil
+        highPrecisionPairedCPUVolume = nil
+        externalAlphaMaskPreviewVolume = nil
+        externalAlphaMaskPreviewVolume = nil
         pendingPreviewVolume = nil
         originalMeshSurface = nil
         fullMeshSurface = nil
@@ -1190,12 +1210,57 @@ final class AppModel: ObservableObject {
 
     func loadVideo(url: URL, restoring state: ChronoVolumeProjectDocument.AppProjectState) {
         pendingProjectStateAfterLoad = state
-        loadVideoInternal(url: url)
+        let alphaURL = VideoSourcePairDiscovery.matchingAlphaURL(for: url)
+        loadVideoInternal(pair: VideoSourcePair(
+            colorURL: url,
+            alphaURL: alphaURL,
+            alphaSourceMode: alphaURL == nil ? .opaque : .external
+        ))
     }
 
     func loadVideo(url: URL) {
         pendingProjectStateAfterLoad = nil
-        loadVideoInternal(url: url)
+        let alphaURL = VideoSourcePairDiscovery.matchingAlphaURL(for: url)
+        loadVideoInternal(pair: VideoSourcePair(
+            colorURL: url,
+            alphaURL: alphaURL,
+            alphaSourceMode: alphaURL == nil ? .opaque : .external
+        ))
+    }
+
+    func loadVideo(pair: VideoSourcePair, restoring state: ChronoVolumeProjectDocument.AppProjectState? = nil) {
+        pendingProjectStateAfterLoad = state
+        loadVideoInternal(pair: pair)
+    }
+
+    func addExternalAlpha(url: URL) {
+        guard var pair = videoSourcePair else {
+            status = "请先打开 A_color"
+            return
+        }
+        let state = makeProjectState()
+        pair.alphaURL = url
+        pair.alphaSourceMode = .external
+        pendingProjectStateAfterLoad = state
+        loadVideoInternal(pair: pair)
+    }
+
+    func removeExternalAlpha() {
+        guard var pair = videoSourcePair, pair.alphaURL != nil else { return }
+        let state = makeProjectState()
+        pair.alphaURL = nil
+        pair.alphaSourceMode = .opaque
+        pendingProjectStateAfterLoad = state
+        loadVideoInternal(pair: pair)
+    }
+
+    func updateExternalAlphaSettings(_ settings: ExternalAlphaSettings) {
+        guard var pair = videoSourcePair, pair.alphaURL != nil else { return }
+        let state = makeProjectState()
+        pair.externalAlphaSettings = settings
+        pair.alphaSourceMode = .external
+        pendingProjectStateAfterLoad = state
+        loadVideoInternal(pair: pair)
     }
 
     func loadStaticMeshPackage(_ package: LoadedMeshPackage, url: URL, displayName: String) {
@@ -1331,6 +1396,12 @@ final class AppModel: ObservableObject {
         let bestVisibleIndex = cached.bestVisibleIndex
 
         fileName = displayName.isEmpty ? url.lastPathComponent : displayName
+        videoSourcePair = nil
+        colorSourceMetadata = nil
+        alphaSourceMetadata = nil
+        highPrecisionAlphaVolume = nil
+        highPrecisionPairedCPUVolume = nil
+        externalAlphaMaskPreviewVolume = nil
         fullCPUVolume = cpuVolume
         fullLoadedVolume = volume
         pendingPreviewVolume = volume
@@ -1393,7 +1464,8 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func loadVideoInternal(url: URL) {
+    private func loadVideoInternal(pair: VideoSourcePair) {
+        let url = pair.colorURL
         loadTask?.cancel()
         cancelMeshModifierCacheRebuild()
         loadGenerationID += 1
@@ -1402,17 +1474,24 @@ final class AppModel: ObservableObject {
         stopPlayback()
 
         fileName = url.lastPathComponent
+        videoSourcePair = pair
         volumeInfo = "-"
         previewVolumeInfo = "-"
         actualVolumeInfo = "-"
         alphaInfo = "-"
         sourceBitDepth = 8
         sourceColorProfile = .rec709
+        sourceAlphaBitDepth = 8
+        previewAlphaBitDepth = 8
+        colorSourceMetadata = nil
+        alphaSourceMetadata = nil
+        alphaSyncStatus = pair.alphaURL == nil ? "单源" : "等待 PTS 校验"
         currentSliceCGImage = nil
         currentIndex = 0
         bestVisibleTIndex = 0
         fullCPUVolume = nil
         fullLoadedVolume = nil
+        highPrecisionAlphaVolume = nil
         pendingPreviewVolume = nil
         originalMeshSurface = nil
         fullMeshSurface = nil
@@ -1436,17 +1515,26 @@ final class AppModel: ObservableObject {
 
         status = "正在读取视频…"
 
-        if let cached = videoLoadCache[url] {
+        if let cached = videoLoadCache[pair] {
             status = "正在切换已缓存视频…"
             loadTask = nil
-            applyLoadedVideo(cached, url: url, generationID: generationID)
+            applyLoadedVideo(cached, pair: pair, generationID: generationID)
             return
         }
 
-        loadTask = Task.detached(priority: .userInitiated) { [url, generationID] in
+        loadTask = Task.detached(priority: .userInitiated) { [pair, generationID] in
+            let colorAccess = pair.colorURL.startAccessingSecurityScopedResource()
+            let alphaAccess = pair.alphaURL?.startAccessingSecurityScopedResource() ?? false
+            defer {
+                if colorAccess { pair.colorURL.stopAccessingSecurityScopedResource() }
+                if alphaAccess { pair.alphaURL?.stopAccessingSecurityScopedResource() }
+            }
             do {
                 let package = try await VideoVolumeLoader.load(
-                    url: url,
+                    colorURL: pair.colorURL,
+                    alphaURL: pair.alphaURL,
+                    settings: pair.externalAlphaSettings,
+                    generatedWhiteColor: pair.usesGeneratedWhiteColor,
                     maxWidth: 1024,
                     maxHeight: 1024,
                     previewMaxDepth: 256
@@ -1458,8 +1546,8 @@ final class AppModel: ObservableObject {
 
                 await MainActor.run { [weak self] in
                     guard let self, self.loadGenerationID == generationID else { return }
-                    self.videoLoadCache[url] = cached
-                    self.applyLoadedVideo(cached, url: url, generationID: generationID)
+                    self.videoLoadCache[pair] = cached
+                    self.applyLoadedVideo(cached, pair: pair, generationID: generationID)
                 }
             } catch is CancellationError {
                 return
@@ -1500,13 +1588,14 @@ final class AppModel: ObservableObject {
     }
 
     func cacheLoadedVideoPackage(_ package: LoadedVideoPackage, url: URL) {
-        guard videoLoadCache[url] == nil else { return }
+        let pair = VideoSourcePair(colorURL: url, alphaSourceMode: package.alphaSourceMode)
+        guard videoLoadCache[pair] == nil else { return }
 
-        Task.detached(priority: .utility) { [package, url] in
+        Task.detached(priority: .utility) { [package, pair] in
             let cached = Self.makeCachedVideoLoad(package: package)
             await MainActor.run { [weak self] in
-                guard let self, self.videoLoadCache[url] == nil else { return }
-                self.videoLoadCache[url] = cached
+                guard let self, self.videoLoadCache[pair] == nil else { return }
+                self.videoLoadCache[pair] = cached
             }
         }
     }
@@ -1538,7 +1627,7 @@ final class AppModel: ObservableObject {
         )
     }
 
-    private func applyLoadedVideo(_ cached: CachedVideoLoad, url: URL, generationID: Int) {
+    private func applyLoadedVideo(_ cached: CachedVideoLoad, pair: VideoSourcePair, generationID: Int) {
         guard loadGenerationID == generationID else { return }
         cancelMeshModifierCacheRebuild()
 
@@ -1546,9 +1635,15 @@ final class AppModel: ObservableObject {
         let full = package.fullTemporalVolume
         let preview = package.previewVolume
         let cpuVolume = cached.cpuVolume
+        let url = pair.colorURL
 
         fullCPUVolume = cpuVolume
         fullLoadedVolume = full
+        highPrecisionAlphaVolume = package.highPrecisionAlphaVolume
+        highPrecisionPairedCPUVolume = nil
+        externalAlphaMaskPreviewVolume = package.alphaSourceMode == .external
+            ? Self.makeAlphaMaskPreviewVolume(from: full)
+            : nil
         pendingPreviewVolume = preview
         originalMeshSurface = nil
         fullMeshSurface = nil
@@ -1571,12 +1666,27 @@ final class AppModel: ObservableObject {
         sourceFrameCount = package.sourceFrameCount
         sourceBitDepth = package.sourceBitDepth
         sourceColorProfile = package.sourceColorProfile
+        sourceAlphaBitDepth = package.sourceAlphaBitDepth
+        previewAlphaBitDepth = package.previewAlphaBitDepth
+        colorSourceMetadata = package.colorMetadata
+        alphaSourceMetadata = package.alphaMetadata
+        alphaSyncStatus = package.alphaSyncStatus
+        var resolvedPair = pair
+        resolvedPair.alphaSourceMode = package.alphaSourceMode
+        videoSourcePair = resolvedPair
         fullTemporalDepthCount = full.depth
         previewDepthCount = preview.depth
         bestVisibleTIndex = cached.bestVisibleIndex
 
         volumeInfo = "\(full.width) × \(full.height) × \(full.depth)"
-        alphaInfo = full.hasMeaningfulAlpha ? "检测到有效 Alpha" : "未检测到有效 Alpha"
+        switch package.alphaSourceMode {
+        case .external:
+            alphaInfo = "外部 B_alpha（源 \(package.sourceAlphaBitDepth)-bit → 交互预览 8-bit）"
+        case .embedded:
+            alphaInfo = "检测到有效内嵌 Alpha"
+        case .opaque:
+            alphaInfo = "无有效 Alpha，按不透明解释"
+        }
 
         if sliceMode == .axis && playbackAxis == .t {
             currentIndex = cached.bestVisibleIndex
@@ -1604,6 +1714,8 @@ final class AppModel: ObservableObject {
             sliceRenderer.setVolume(full)
         }
 
+        applyExternalAlphaPreviewMode()
+
         updateReferencePlaneOverlay()
         rebuildCurrentSlice()
         status = "就绪"
@@ -1612,6 +1724,54 @@ final class AppModel: ObservableObject {
             self.pendingProjectStateAfterLoad = nil
             restoreProjectState(pendingProjectStateAfterLoad)
         }
+    }
+
+    func setExternalAlphaPreviewMode(_ mode: ExternalAlphaPreviewMode) {
+        externalAlphaPreviewMode = mode
+        applyExternalAlphaPreviewMode()
+        rebuildCurrentSlice()
+    }
+
+    private func applyExternalAlphaPreviewMode() {
+        guard videoSourcePair?.alphaSourceMode == .external, let fullLoadedVolume else { return }
+        let volume: LoadedVolume
+        if externalAlphaPreviewMode == .grayscaleMask, let mask = externalAlphaMaskPreviewVolume {
+            volume = mask
+            showCheckerboard = false
+        } else {
+            volume = fullLoadedVolume
+            showCheckerboard = externalAlphaPreviewMode == .checkerboardTransparency
+        }
+        sliceRenderer?.setVolume(volume)
+        axisSliceRenderer?.setVolume(volume)
+        planeSliceRenderer?.setVolume(volume)
+        sliceRenderer?.requestRedraw()
+        axisSliceRenderer?.requestRedraw()
+        planeSliceRenderer?.requestRedraw()
+    }
+
+    nonisolated private static func makeAlphaMaskPreviewVolume(from volume: LoadedVolume) -> LoadedVolume {
+        var rgba = volume.rgba
+        var offset = 0
+        while offset + 3 < rgba.count {
+            let alpha = rgba[offset + 3]
+            rgba[offset] = alpha
+            rgba[offset + 1] = alpha
+            rgba[offset + 2] = alpha
+            rgba[offset + 3] = 255
+            offset += 4
+        }
+        return LoadedVolume(
+            width: volume.width,
+            height: volume.height,
+            depth: volume.depth,
+            rgba: rgba,
+            hasMeaningfulAlpha: false,
+            sourceFPS: volume.sourceFPS,
+            sourceDurationSeconds: volume.sourceDurationSeconds,
+            sourceFrameCountEstimate: volume.sourceFrameCountEstimate,
+            sourceColorProfile: volume.sourceColorProfile
+        )
     }
 
     // MARK: - Player

@@ -20,6 +20,7 @@ struct StartDistributedJobRequest: Codable {
     let localSourcePath: String
     let outputDirectory: String
     let preparedRawCachePath: String?
+    var localAlphaSourcePath: String? = nil
 }
 
 struct StartDistributedJobBatchRequest: Codable {
@@ -28,6 +29,7 @@ struct StartDistributedJobBatchRequest: Codable {
     let localSourcePath: String
     let outputDirectory: String
     let preparedRawCachePath: String?
+    var localAlphaSourcePath: String? = nil
 }
 
 struct PrepareSourceRequest: Codable {

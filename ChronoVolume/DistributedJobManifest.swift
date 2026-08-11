@@ -9,6 +9,16 @@ struct DistributedJobManifest: Codable {
     let jobID: UUID
     let sourceFileName: String
     let sourceFileHash: String
+    var alphaSourceFileName: String? = nil
+    var alphaSourceFileHash: String? = nil
+    var alphaSourceMode: AlphaSourceMode? = nil
+    var externalAlphaSettings: ExternalAlphaSettings? = nil
+    var usesGeneratedWhiteColor: Bool? = nil
+    var sourceColorBitDepth: Int? = nil
+    var sourceAlphaBitDepth: Int? = nil
+    var outputBitDepth: Int? = nil
+    var sourcePresentationTimes: [Double]? = nil
+    var alphaAssociation: AlphaAssociation? = nil
     let sourceWidth: Int
     let sourceHeight: Int
     let sourceFrameCount: Int

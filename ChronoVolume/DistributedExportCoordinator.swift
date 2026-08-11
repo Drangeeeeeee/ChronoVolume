@@ -48,6 +48,7 @@ struct DistributedStartJobRequest: Codable {
     let localSourcePath: String
     let outputDirectory: String
     let preparedRawCachePath: String?
+    var localAlphaSourcePath: String? = nil
 }
 
 struct DistributedStartJobBatchRequest: Codable {
@@ -56,6 +57,7 @@ struct DistributedStartJobBatchRequest: Codable {
     let localSourcePath: String
     let outputDirectory: String
     let preparedRawCachePath: String?
+    var localAlphaSourcePath: String? = nil
 }
 
 struct DistributedPrepareSourceRequest: Codable {
@@ -207,13 +209,15 @@ enum DistributedExportCoordinator {
         job: DistributedJobManifest,
         workerLocalSourcePath: String,
         outputDirectory: String = "/tmp/ChronoVolumeDistributed",
-        preparedRawCachePath: String? = nil
+        preparedRawCachePath: String? = nil,
+        workerLocalAlphaSourcePath: String? = nil
     ) async throws {
         let req = DistributedStartJobRequest(
             job: job,
             localSourcePath: workerLocalSourcePath,
             outputDirectory: outputDirectory,
-            preparedRawCachePath: preparedRawCachePath
+            preparedRawCachePath: preparedRawCachePath,
+            localAlphaSourcePath: workerLocalAlphaSourcePath
         )
 
         let response: DistributedGenericOKResponse = try await postJSON(
@@ -233,14 +237,16 @@ enum DistributedExportCoordinator {
         jobs: [DistributedJobManifest],
         workerLocalSourcePath: String,
         outputDirectory: String = "/tmp/ChronoVolumeDistributed",
-        preparedRawCachePath: String? = nil
+        preparedRawCachePath: String? = nil,
+        workerLocalAlphaSourcePath: String? = nil
     ) async throws {
         let req = DistributedStartJobBatchRequest(
             batchID: batchID,
             jobs: jobs,
             localSourcePath: workerLocalSourcePath,
             outputDirectory: outputDirectory,
-            preparedRawCachePath: preparedRawCachePath
+            preparedRawCachePath: preparedRawCachePath,
+            localAlphaSourcePath: workerLocalAlphaSourcePath
         )
 
         let response: DistributedGenericOKResponse = try await postJSON(
@@ -416,7 +422,17 @@ enum DistributedExportCoordinator {
         rangeStart: Int,
         rangeEnd: Int,
         colorProfile: VideoColorProfile = .rec709,
-        sourceFileHash: String
+        sourceFileHash: String,
+        alphaSourceURL: URL? = nil,
+        alphaSourceFileHash: String? = nil,
+        alphaSourceMode: AlphaSourceMode? = nil,
+        externalAlphaSettings: ExternalAlphaSettings? = nil,
+        usesGeneratedWhiteColor: Bool = false,
+        sourceColorBitDepth: Int? = nil,
+        sourceAlphaBitDepth: Int? = nil,
+        outputBitDepth: Int? = nil,
+        sourcePresentationTimes: [Double]? = nil,
+        alphaAssociation: AlphaAssociation? = nil
     ) -> DistributedJobManifest {
         let finalOutputWidth: Int
         let finalOutputHeight: Int
@@ -456,6 +472,16 @@ enum DistributedExportCoordinator {
             jobID: UUID(),
             sourceFileName: sourceURL.lastPathComponent,
             sourceFileHash: sourceFileHash,
+            alphaSourceFileName: alphaSourceURL?.lastPathComponent,
+            alphaSourceFileHash: alphaSourceFileHash,
+            alphaSourceMode: alphaSourceMode,
+            externalAlphaSettings: externalAlphaSettings,
+            usesGeneratedWhiteColor: usesGeneratedWhiteColor,
+            sourceColorBitDepth: sourceColorBitDepth,
+            sourceAlphaBitDepth: sourceAlphaBitDepth,
+            outputBitDepth: outputBitDepth,
+            sourcePresentationTimes: sourcePresentationTimes,
+            alphaAssociation: alphaAssociation,
             sourceWidth: sourceWidth,
             sourceHeight: sourceHeight,
             sourceFrameCount: sourceFrameCount,

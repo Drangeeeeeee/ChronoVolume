@@ -6212,7 +6212,10 @@ final class CompositionModel: ObservableObject {
             }
 
             let preserveAlpha = requiredHighPrecisionCachePreserveAlpha(for: asset)
-            let cacheURL = HighPrecisionCacheHelper.cacheMovieURL(for: asset.url, preserveAlpha: preserveAlpha)
+            let cacheURL = try await HighPrecisionCacheHelper.validatedCacheURL(
+                for: asset.url,
+                preserveAlpha: preserveAlpha
+            )
             setExportCacheState(assetID: id, state: .loading, message: "导出缓存：正在载入高精度体")
 
             let volume = try await Self.loadHighPrecisionExportVolume(

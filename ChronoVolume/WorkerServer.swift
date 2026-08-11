@@ -782,7 +782,8 @@ final class WorkerServer {
                 job: req.job,
                 localSourcePath: req.localSourcePath,
                 outputDirectory: outputDirectory.path,
-                preparedRawCachePath: preparedRawCachePath(for: req, preparedSourceState: preparedSourceState)
+                preparedRawCachePath: preparedRawCachePath(for: req, preparedSourceState: preparedSourceState),
+                localAlphaSourcePath: req.localAlphaSourcePath
             )
 
             let result = try executor.execute(
@@ -885,7 +886,8 @@ final class WorkerServer {
                     job: job,
                     localSourcePath: req.localSourcePath,
                     outputDirectory: outputDirectory.path,
-                    preparedRawCachePath: req.preparedRawCachePath
+                    preparedRawCachePath: req.preparedRawCachePath,
+                    localAlphaSourcePath: req.localAlphaSourcePath
                 )
                 let preparedSourceState = preparedSourceState(for: singleRequest)
                 let localOutputRequest = StartDistributedJobRequest(
@@ -895,7 +897,8 @@ final class WorkerServer {
                     preparedRawCachePath: preparedRawCachePath(
                         for: singleRequest,
                         preparedSourceState: preparedSourceState
-                    )
+                    ),
+                    localAlphaSourcePath: req.localAlphaSourcePath
                 )
 
                 let result = try executor.execute(

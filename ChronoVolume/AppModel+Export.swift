@@ -28,10 +28,10 @@ extension AppModel {
     }
 
     func highPrecisionCacheStatusText() -> String? {
-        guard let sourceURL = exportSourceURL else { return nil }
+        guard let pair = videoSourcePair else { return nil }
 
-        let opaque = HighPrecisionCacheHelper.hasCache(for: sourceURL, preserveAlpha: false)
-        let alpha = HighPrecisionCacheHelper.hasCache(for: sourceURL, preserveAlpha: true)
+        let opaque = HighPrecisionCacheHelper.hasCache(for: pair, preserveAlpha: false)
+        let alpha = HighPrecisionCacheHelper.hasCache(for: pair, preserveAlpha: true)
 
         let opaqueText = opaque ? "不带Alpha已建立" : "不带Alpha未建立"
         let alphaText = alpha ? "带Alpha已建立" : "带Alpha未建立"
@@ -39,29 +39,31 @@ extension AppModel {
     }
 
     func removeHighPrecisionCacheInteractively() {
-        guard let sourceURL = exportSourceURL else {
+        guard let pair = videoSourcePair else {
             status = "没有可用的源视频 URL，无法清理高精度缓存"
             return
         }
 
-        HighPrecisionCacheHelper.removeCache(for: sourceURL)
+        HighPrecisionCacheHelper.removeCache(for: pair)
         status = "已清理当前视频的高精度缓存"
     }
 
     func buildHighPrecisionCacheInteractively(preserveAlpha: Bool) {
-        guard let sourceURL = exportSourceURL else {
+        guard let pair = videoSourcePair else {
             status = "没有可用的源视频 URL，无法建立高精度缓存"
             return
         }
 
         let label = preserveAlpha ? "建立高精度缓存（带 Alpha）" : "建立高精度缓存（不带 Alpha）"
         status = "\(label) 0%"
+        let alphaSnapshot = highPrecisionAlphaVolume
 
         Task.detached(priority: .userInitiated) {
             do {
                 _ = try await HighPrecisionCacheHelper.buildCache(
-                    from: sourceURL,
+                    from: pair,
                     preserveAlpha: preserveAlpha,
+                    highPrecisionAlpha: alphaSnapshot,
                     progress: { progress, text in
                         Task { @MainActor in
                             let pct = Int(progress * 100.0)
@@ -69,8 +71,12 @@ extension AppModel {
                         }
                     }
                 )
+                let mergedSourceVolume = pair.alphaSourceMode == .external && preserveAlpha
+                    ? try await HighPrecisionCacheHelper.loadMergedSourceCPUVolume(for: pair)
+                    : nil
 
                 await MainActor.run {
+                    self.highPrecisionPairedCPUVolume = mergedSourceVolume
                     self.status = "\(label) 完成"
                 }
             } catch {
@@ -85,12 +91,33 @@ extension AppModel {
         preserveAlpha: Bool,
         padToEven: Bool = true
     ) {
-        guard let sourceURL = exportSourceURL else {
+        guard exportSourceURL != nil, let pair = videoSourcePair else {
             status = "没有可用的源视频 URL，无法建立高精度缓存"
             return
         }
 
-        if HighPrecisionCacheHelper.hasCache(for: sourceURL, preserveAlpha: preserveAlpha) {
+        if HighPrecisionCacheHelper.hasCache(for: pair, preserveAlpha: preserveAlpha) {
+            if pair.alphaSourceMode == .external, preserveAlpha, highPrecisionPairedCPUVolume == nil {
+                status = "正在读取源分辨率 Alpha sidecar…"
+                Task.detached(priority: .userInitiated) {
+                    do {
+                        let merged = try await HighPrecisionCacheHelper.loadMergedSourceCPUVolume(for: pair)
+                        await MainActor.run {
+                            self.highPrecisionPairedCPUVolume = merged
+                            self.exportCurrent2DVideoInteractively(
+                                preserveAlpha: preserveAlpha,
+                                qualityScale: 1,
+                                padToEven: padToEven,
+                                highPrecision: true,
+                                colorProfile: self.sourceColorProfile
+                            )
+                        }
+                    } catch {
+                        await MainActor.run { self.status = "读取高精度 paired cache 失败：\(error.localizedDescription)" }
+                    }
+                }
+                return
+            }
             exportCurrent2DVideoInteractively(
                 preserveAlpha: preserveAlpha,
                 qualityScale: 1.0,
@@ -103,12 +130,14 @@ extension AppModel {
 
         let label = preserveAlpha ? "建立缓存并高精度导出（带 Alpha）" : "建立缓存并高精度导出（不带 Alpha）"
         status = "\(label) 0%"
+        let alphaSnapshot = highPrecisionAlphaVolume
 
         Task.detached(priority: .userInitiated) {
             do {
                 _ = try await HighPrecisionCacheHelper.buildCache(
-                    from: sourceURL,
+                    from: pair,
                     preserveAlpha: preserveAlpha,
+                    highPrecisionAlpha: alphaSnapshot,
                     progress: { progress, text in
                         Task { @MainActor in
                             let pct = Int(progress * 100.0)
@@ -116,8 +145,12 @@ extension AppModel {
                         }
                     }
                 )
+                let mergedSourceVolume = pair.alphaSourceMode == .external && preserveAlpha
+                    ? try await HighPrecisionCacheHelper.loadMergedSourceCPUVolume(for: pair)
+                    : nil
 
                 await MainActor.run {
+                    self.highPrecisionPairedCPUVolume = mergedSourceVolume
                     self.status = "\(label) 缓存完成，准备导出"
                     self.exportCurrent2DVideoInteractively(
                         preserveAlpha: preserveAlpha,
@@ -143,10 +176,21 @@ extension AppModel {
         bitDepth: Int = 8,
         colorProfile: VideoColorProfile = .rec709
     ) {
-        guard let volume = exportCPUVolume else {
+        guard let previewVolume = exportCPUVolume else {
             status = "没有可导出的 2D 数据"
             return
         }
+
+        let usesExternalHighPrecision = highPrecision && preserveAlpha && videoSourcePair?.alphaSourceMode == .external
+        if usesExternalHighPrecision, sourceBitDepth > 8 || sourceAlphaBitDepth > 8 {
+            status = "当前 CPU/MOV paired-volume 导出只能无损承载 8-bit A_color + 8-bit B_alpha；源为颜色 \(sourceBitDepth)-bit / Alpha \(sourceAlphaBitDepth)-bit，已明确拒绝降位深。"
+            return
+        }
+        if usesExternalHighPrecision, highPrecisionPairedCPUVolume == nil {
+            status = "请先建立“带 Alpha”高精度缓存；导出将从源分辨率 UInt16 sidecar 构建 paired volume，不会使用 1024px 预览体。"
+            return
+        }
+        let volume = usesExternalHighPrecision ? highPrecisionPairedCPUVolume! : previewVolume
 
         let sourceURL = exportSourceURL
         let usesModifiedVolumeTexture = isVideoVolumeModifierActive
@@ -163,7 +207,7 @@ extension AppModel {
             ? min(1.0, max(0.05, qualityScale))
             : min(4.0, max(0.05, qualityScale))
         let meshQualityScale = exportMeshForSizing == nil ? 1.0 : max(1.0, outputQualityScale)
-        let canUseSourceHighPrecision = highPrecision && sourceURL != nil && !usesModifiedVolumeTexture
+        let canUseSourceHighPrecision = highPrecision && sourceURL != nil && !usesModifiedVolumeTexture && !usesExternalHighPrecision
 
         let highPrecisionPlaneMetrics = canUseSourceHighPrecision && sliceMode == .plane && distributedSourceWidth > 0 && distributedSourceHeight > 0 && sourceFrameCount > 0
             ? VideoExportHelper.highPrecisionPlaneOutputMetrics(
@@ -176,7 +220,18 @@ extension AppModel {
             )
             : nil
 
-        let baseFrameCount = totalFrameCountForCurrentMode()
+        let baseFrameCount: Int = usesExternalHighPrecision ? {
+            switch sliceMode {
+            case .axis:
+                switch playbackAxis {
+                case .t: return volume.depth
+                case .x: return volume.width
+                case .y: return volume.height
+                }
+            case .plane:
+                return volume.planeGeometry(for: referencePlane).sliceCount
+            }
+        }() : totalFrameCountForCurrentMode()
         let frameCount = highPrecisionPlaneMetrics?.sliceCount
             ?? max(baseFrameCount, Int((Double(baseFrameCount) * meshQualityScale).rounded()))
         guard frameCount > 0 else {
@@ -184,7 +239,20 @@ extension AppModel {
             return
         }
 
-        let size = highPrecisionPlaneMetrics.map { ($0.width, $0.height) } ?? imageSizeForCurrentMode()
+        let pairedSize: (Int, Int)? = usesExternalHighPrecision ? {
+            switch sliceMode {
+            case .axis:
+                switch playbackAxis {
+                case .t: return (volume.width, volume.height)
+                case .x: return (volume.depth, volume.height)
+                case .y: return (volume.width, volume.depth)
+                }
+            case .plane:
+                let geometry = volume.planeGeometry(for: referencePlane)
+                return (geometry.outWidth, geometry.outHeight)
+            }
+        }() : nil
+        let size = highPrecisionPlaneMetrics.map { ($0.width, $0.height) } ?? pairedSize ?? imageSizeForCurrentMode()
         guard size.0 > 0, size.1 > 0 else {
             status = "当前模式尺寸无效，无法导出"
             return
@@ -244,11 +312,20 @@ extension AppModel {
             : nil
         let exportNeedsModifiedCPUFallback = usesModifiedVolumeTexture && !modifiedGPUTextureAvailable
 
+        let exportPair = videoSourcePair
+        let cachedSourcePair: VideoSourcePair?
         let effectiveSourceURL: URL?
-        if canUseSourceHighPrecision, let sourceURL,
-           HighPrecisionCacheHelper.hasCache(for: sourceURL, preserveAlpha: preserveAlpha) {
-            effectiveSourceURL = HighPrecisionCacheHelper.cacheMovieURL(for: sourceURL, preserveAlpha: preserveAlpha)
+        if usesExternalHighPrecision {
+            cachedSourcePair = exportPair
+            effectiveSourceURL = nil
+        } else if canUseSourceHighPrecision, sourceURL != nil, let pair = exportPair,
+                  HighPrecisionCacheHelper.hasCache(for: pair, preserveAlpha: preserveAlpha) {
+            cachedSourcePair = pair
+            // hasCache is UI/presence-only. The URL is resolved only after the
+            // asynchronous SHA-256 validation at export start.
+            effectiveSourceURL = sourceURL
         } else {
+            cachedSourcePair = nil
             effectiveSourceURL = sourceURL
         }
 
@@ -269,12 +346,22 @@ extension AppModel {
             baseLabel = qualityScale < 0.999 ? "不带 Alpha 快速导出" : "不带 Alpha 标准导出"
         }
 
-        let sourceHint = highPrecision && effectiveSourceURL != sourceURL ? " · 使用高精度缓存" : ""
+        let sourceHint = highPrecision && cachedSourcePair != nil ? " · 使用高精度缓存" : ""
         let label = padToEven ? "\(baseLabel)\(sourceHint)" : "\(baseLabel)\(sourceHint)（原始尺寸）"
         status = "\(label) 0%"
 
         Task.detached(priority: .userInitiated) {
             do {
+                let validatedEffectiveSourceURL: URL?
+                if let cachedSourcePair {
+                    let validatedCache = try await HighPrecisionCacheHelper.validatedCacheURL(
+                        for: cachedSourcePair,
+                        preserveAlpha: preserveAlpha
+                    )
+                    validatedEffectiveSourceURL = usesExternalHighPrecision ? nil : validatedCache
+                } else {
+                    validatedEffectiveSourceURL = effectiveSourceURL
+                }
                 var requestVolume = exportVolume
                 var requestVolumeTextureCacheID = exportVolumeTextureCacheID
                 var requestUsesModifiedVolumeTexture = usesModifiedVolumeTexture && modifiedGPUTextureAvailable
@@ -329,7 +416,7 @@ extension AppModel {
                     highPrecision: canUseSourceHighPrecision,
                     sourceFrameCount: exportSourceFrameCount,
                     playbackRate: exportPlaybackRate,
-                    sourceURL: effectiveSourceURL,
+                    sourceURL: validatedEffectiveSourceURL,
                     referencePlane: exportReferencePlane,
                     bitDepth: exportBitDepth,
                     colorProfile: exportColorProfile,

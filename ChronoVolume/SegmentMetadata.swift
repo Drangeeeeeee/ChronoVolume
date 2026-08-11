@@ -11,6 +11,8 @@ struct SegmentMetadata: Codable {
     let fps: Double
     let preserveAlpha: Bool
     let codec: String
+    var outputBitDepth: Int = 8
+    var alphaAssociation: AlphaAssociation = .straight
     let fileName: String
     let fileSizeBytes: Int64
 }

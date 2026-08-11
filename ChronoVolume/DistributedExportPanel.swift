@@ -4,6 +4,7 @@ struct DistributedExportPanel: View {
     @ObservedObject var settings: DistributedExportSettings
     let currentAxisTitle: String
     let totalOutputFrames: Int
+    let pairedPrecisionNotice: String?
     let onTestAllWorkers: (() -> Void)?
     let onStartDistributedExport: (() -> Void)?
     let onRefreshWorkerSource: (() -> Void)?
@@ -11,7 +12,7 @@ struct DistributedExportPanel: View {
     let onPrepareWorkerRawCache: (() -> Void)?
 
     var body: some View {
-        GroupBox("分布式高精度导出") {
+        GroupBox("分布式导出") {
             VStack(alignment: .leading, spacing: 10) {
                 Toggle("启用分布式导出", isOn: $settings.isEnabled)
                 Toggle("Worker 缺少源缓存时询问上传", isOn: $settings.offerUploadWhenSourceMissing)
@@ -20,6 +21,12 @@ struct DistributedExportPanel: View {
                 Text("这里用于设置 Worker、分配比例与源缓存策略；导出进度会集中显示在导出弹窗里。开启诊断记录后，导出完成会在视频同目录保存主机与 Worker 的耗时数据。")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+
+                if let pairedPrecisionNotice {
+                    Text(pairedPrecisionNotice)
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
 
                 LabeledContent("当前轴") {
                     Text(currentAxisTitle)

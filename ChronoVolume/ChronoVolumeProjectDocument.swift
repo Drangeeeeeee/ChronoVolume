@@ -3,7 +3,7 @@ import Foundation
 struct ChronoVolumeProjectDocument: Codable {
     static let fileExtension = "CV"
     static let legacyFileExtension = "chronovolume"
-    static let currentFormatVersion = 2
+    static let currentFormatVersion = 5
 
     var formatVersion: Int = Self.currentFormatVersion
     var savedAt: Date = Date()
@@ -61,6 +61,10 @@ struct ChronoVolumeProjectDocument: Codable {
             autosaveOriginalProjectPath = nil
             autosaveCreatedAt = nil
         }
+        // v3 adds optional security-scoped bookmarks and A_color/B_alpha pairing.
+        // v4 records AlphaCheater-origin items and B_alpha-only generated-white pairs.
+        // v5 persists the stable normalized-directory + filename-prefix pairing key.
+        // Optional fields keep v1/v2 documents source compatible.
         formatVersion = Self.currentFormatVersion
     }
 
@@ -68,9 +72,46 @@ struct ChronoVolumeProjectDocument: Codable {
         var id: UUID
         var path: String
         var name: String
+        var colorBookmark: Data? = nil
+        var alphaPath: String? = nil
+        var alphaBookmark: Data? = nil
+        var alphaSourceMode: AlphaSourceMode? = nil
+        var externalAlphaSettings: ExternalAlphaSettings? = nil
+        var usesGeneratedWhiteColor: Bool? = nil
+        var isAlphaCheater: Bool? = nil
+        var pairingKey: String? = nil
 
         var url: URL {
             URL(fileURLWithPath: path)
+        }
+
+        var alphaURL: URL? {
+            alphaPath.map { URL(fileURLWithPath: $0) }
+        }
+
+        func resolvedSourcePair() -> VideoSourcePair {
+            resolvedSourcePair(bookmarkResolver: Self.resolveBookmark)
+        }
+
+        func resolvedSourcePair(bookmarkResolver: (Data?) -> URL?) -> VideoSourcePair {
+            VideoSourcePair(
+                colorURL: bookmarkResolver(colorBookmark) ?? url,
+                alphaURL: bookmarkResolver(alphaBookmark) ?? alphaURL,
+                alphaSourceMode: alphaSourceMode ?? (alphaPath == nil ? .opaque : .external),
+                externalAlphaSettings: externalAlphaSettings ?? ExternalAlphaSettings(),
+                usesGeneratedWhiteColor: usesGeneratedWhiteColor ?? false
+            )
+        }
+
+        private static func resolveBookmark(_ bookmark: Data?) -> URL? {
+            guard let bookmark else { return nil }
+            var stale = false
+            return try? URL(
+                resolvingBookmarkData: bookmark,
+                options: [.withSecurityScope, .withoutUI],
+                relativeTo: nil,
+                bookmarkDataIsStale: &stale
+            )
         }
     }
 

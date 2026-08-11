@@ -13,6 +13,22 @@ struct HighPrecisionCacheMetadata: Codable {
     let codecName: String
     var colorProfile: VideoColorProfile = .rec709
     let createdAtISO8601: String
+    var cacheKey: String? = nil
+    var alphaSourcePath: String? = nil
+    var sourceAlphaBitDepth: Int? = nil
+    var previewAlphaBitDepth: Int? = nil
+    var externalAlphaSettings: ExternalAlphaSettings? = nil
+    var alphaSidecarFileName: String? = nil
+    var alphaSidecarWidth: Int? = nil
+    var alphaSidecarHeight: Int? = nil
+    var alphaSidecarDepth: Int? = nil
+    var alphaSampleFormat: String? = nil
+    var alphaEndianness: String? = nil
+    var alphaPresentationTimes: [Double]? = nil
+    var alphaSourceRange: ExternalAlphaRange? = nil
+    var alphaSidecarSHA256: String? = nil
+    var colorSourceSHA256: String? = nil
+    var alphaSourceSHA256: String? = nil
 
     private enum CodingKeys: String, CodingKey {
         case version
@@ -27,6 +43,22 @@ struct HighPrecisionCacheMetadata: Codable {
         case codecName
         case colorProfile
         case createdAtISO8601
+        case cacheKey
+        case alphaSourcePath
+        case sourceAlphaBitDepth
+        case previewAlphaBitDepth
+        case externalAlphaSettings
+        case alphaSidecarFileName
+        case alphaSidecarWidth
+        case alphaSidecarHeight
+        case alphaSidecarDepth
+        case alphaSampleFormat
+        case alphaEndianness
+        case alphaPresentationTimes
+        case alphaSourceRange
+        case alphaSidecarSHA256
+        case colorSourceSHA256
+        case alphaSourceSHA256
     }
 
     init(
@@ -71,6 +103,22 @@ struct HighPrecisionCacheMetadata: Codable {
         codecName = try container.decodeIfPresent(String.self, forKey: .codecName) ?? ""
         colorProfile = try container.decodeIfPresent(VideoColorProfile.self, forKey: .colorProfile) ?? .rec709
         createdAtISO8601 = try container.decodeIfPresent(String.self, forKey: .createdAtISO8601) ?? ""
+        cacheKey = try container.decodeIfPresent(String.self, forKey: .cacheKey)
+        alphaSourcePath = try container.decodeIfPresent(String.self, forKey: .alphaSourcePath)
+        sourceAlphaBitDepth = try container.decodeIfPresent(Int.self, forKey: .sourceAlphaBitDepth)
+        previewAlphaBitDepth = try container.decodeIfPresent(Int.self, forKey: .previewAlphaBitDepth)
+        externalAlphaSettings = try container.decodeIfPresent(ExternalAlphaSettings.self, forKey: .externalAlphaSettings)
+        alphaSidecarFileName = try container.decodeIfPresent(String.self, forKey: .alphaSidecarFileName)
+        alphaSidecarWidth = try container.decodeIfPresent(Int.self, forKey: .alphaSidecarWidth)
+        alphaSidecarHeight = try container.decodeIfPresent(Int.self, forKey: .alphaSidecarHeight)
+        alphaSidecarDepth = try container.decodeIfPresent(Int.self, forKey: .alphaSidecarDepth)
+        alphaSampleFormat = try container.decodeIfPresent(String.self, forKey: .alphaSampleFormat)
+        alphaEndianness = try container.decodeIfPresent(String.self, forKey: .alphaEndianness)
+        alphaPresentationTimes = try container.decodeIfPresent([Double].self, forKey: .alphaPresentationTimes)
+        alphaSourceRange = try container.decodeIfPresent(ExternalAlphaRange.self, forKey: .alphaSourceRange)
+        alphaSidecarSHA256 = try container.decodeIfPresent(String.self, forKey: .alphaSidecarSHA256)
+        colorSourceSHA256 = try container.decodeIfPresent(String.self, forKey: .colorSourceSHA256)
+        alphaSourceSHA256 = try container.decodeIfPresent(String.self, forKey: .alphaSourceSHA256)
     }
 }
 
