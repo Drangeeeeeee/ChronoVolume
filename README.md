@@ -131,6 +131,14 @@ xcodebuild -project ChronoVolume.xcodeproj \
 
 - [AlphaCheater](https://github.com/Drangeeeeeee/AlphaCheater)：将 RGBA 视频拆分为 `A_color` 颜色流与 `B_alpha` 灰度透明度流。
 
+## 赞助与商业支持
+
+如果 ChronoVolume 为你的个人创作、研究工作或商业产品创造了价值，欢迎自愿赞助本项目，支持后续维护、格式兼容、性能优化和文档完善。
+
+赞助完全自愿，不是使用、修改或分发 ChronoVolume 的条件，也不会改变 MIT License 已授予的任何权利。即使不赞助，你仍然可以继续按照 MIT License 使用本项目。
+
+如果企业需要定制功能、制作管线集成、分布式渲染部署、特殊编码格式支持或技术咨询，也欢迎通过 GitHub 与作者联系并单独协商。
+
 ## License
 
 ChronoVolume 使用 MIT License，详见 [LICENSE](LICENSE)。
