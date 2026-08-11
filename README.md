@@ -137,7 +137,7 @@ xcodebuild -project ChronoVolume.xcodeproj \
 
 赞助完全自愿，不是使用、修改或分发 ChronoVolume 的条件，也不会改变 MIT License 已授予的任何权利。即使不赞助，你仍然可以继续按照 MIT License 使用本项目。
 
-如果企业需要定制功能、制作管线集成、分布式渲染部署、特殊编码格式支持或技术咨询，也欢迎通过 GitHub 与作者联系并单独协商。
+如果企业需要定制功能、制作管线集成、分布式渲染部署、特殊编码格式支持或技术咨询，欢迎发送邮件至 [1336135638@qq.com](mailto:1336135638@qq.com) 与作者单独协商。
 
 ## License
 
